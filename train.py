@@ -36,6 +36,7 @@ import numpy as np
 import yaml
 
 ROOT = Path(__file__).resolve().parent
+MIN_STD = 0.25          # action noise restored at every curriculum stage advance
 sys.path.insert(0, str(ROOT))
 
 
@@ -130,7 +131,7 @@ def main():
         model = PPO(
             "MlpPolicy", venv, device="cpu", seed=args.seed,
             n_steps=512, batch_size=512, n_epochs=6, learning_rate=3e-4,
-            gamma=0.99, gae_lambda=0.95, clip_range=0.2, ent_coef=0.002,
+            gamma=0.99, gae_lambda=0.95, clip_range=0.2, ent_coef=0.005,
             vf_coef=0.5, max_grad_norm=0.5,
             policy_kwargs=dict(net_arch=dict(pi=[256, 256], vf=[256, 256]), log_std_init=-1.0),
             verbose=0)
@@ -182,6 +183,13 @@ def main():
             if tracker.should_advance():
                 k = tracker.advance(ts)
                 self.training_env.env_method("set_stage", k)
+                # Re-inject exploration: on easy stages PPO's action noise
+                # shrinks towards zero (we measured 0.05), and a nearly
+                # deterministic policy cannot discover the new skills a harder
+                # stage needs (it got WORSE in the traffic stage). So each new
+                # stage starts with at least MIN_STD of exploration noise.
+                with torch.no_grad():
+                    self.model.policy.log_std.clamp_(min=float(np.log(MIN_STD)))
                 print(f"\n=== CURRICULUM: advancing to stage {k}: {STAGES[k]['name']} at {ts} steps ===\n",
                       flush=True)
             if ts - self.last_ckpt >= 250_000:
