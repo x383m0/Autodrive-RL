@@ -56,6 +56,22 @@ for passing score thresholds; 1 star unlocks the next level.
   points each needs; stars turn gold when earned.
 - Maps show no speed-limit signs (game rule: no limits except school zones).
 
+## Level page template (all current and future levels)
+
+Every level page is built from the same template - new levels only need an
+entry in `autodrive/levels.py`:
+
+- the level goal in large text, then three SVG stars with the points each
+  needs (empty outline until earned, gold once earned);
+- no rule bullet points;
+- the level's map shown right away next to the workshop (until the first
+  training of that level, then the live view takes its place);
+- the map shows **only what the level contains**: level 1 is just the
+  parking pad, levels 2-3 are cropped to their road, city levels show the
+  town because the town is part of the level. A future level that only uses
+  part of the world must likewise show only that part;
+- no speed-limit signs except where a limit really applies (school zones).
+
 ## Training
 
 - The player chooses the training time.
