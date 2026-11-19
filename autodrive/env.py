@@ -44,9 +44,12 @@ from .vehicle import LENGTH, MAX_BRAKE, MAX_STEER, WIDTH, BicycleCar
 DT = 0.1
 WP_OFFSETS = np.array([2, 4, 6, 8, 11, 14, 18, 23, 30, 40], dtype=float)
 FRAME_DIM = N_RAYS * 4 + 6 + 5 + 21 + 3 + 7 + 5
-PARK_LAT_TOL = 0.75
-PARK_LON_TOL = 1.3
-PARK_HEAD_TOL = np.deg2rad(20)
+# "Parked" = the car is inside its slot and (almost) stopped. The window is
+# deliberately reachable; how CENTRED the car is gets rewarded separately by
+# the parking_precision term (1.0 = perfect, 0.0 = at the edge of this window).
+PARK_LAT_TOL = 0.9                  # sideways, metres (slot 3.3 m, car 1.9 m)
+PARK_LON_TOL = 1.6                  # lengthwise, metres
+PARK_HEAD_TOL = np.deg2rad(25)
 PARK_SPEED = 0.3
 STATS_SPEED_TOL = 3.0 / 3.6     # m/s, for metrics only (not rewards)
 

@@ -80,7 +80,8 @@ terms:
     weight: 2.0
 
   # [-] Per step: metres away from the lane centre beyond lane_deadband_m.
-  #     Also punishes drifting into the oncoming lane. (Not used in the lot.)
+  #     Also punishes drifting into the oncoming lane. In the parking lot it
+  #     measures the distance from the planned path into the slot.
   lane_deviation:
     enabled: true
     weight: 0.01

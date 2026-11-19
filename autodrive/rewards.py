@@ -42,7 +42,7 @@ TERMS = {
     "speeding":             (-1, "step",  "m/s above the speed limit (+ tolerance)"),
     "red_light":            (-1, "event", "crossed a stop line on red"),
     "stop_sign":            (-1, "event", "rolled through a stop sign without stopping"),
-    "lane_deviation":       (-1, "step",  "metres away from the lane centre (beyond deadband)"),
+    "lane_deviation":       (-1, "step",  "metres from the lane centre / planned path (beyond deadband)"),
     "off_road":             (-1, "step",  "any wheel on the sidewalk / off the asphalt"),
     "comfort":              (-1, "step",  "jerk + fast steering, each scaled 0..1"),
     "stall":                (-1, "step",  "standing still with no reason to"),
@@ -190,7 +190,10 @@ class RewardComputer:
         sig["speeding"] = max(0.0, m["speed"] - (m["limit"] + tol))
         sig["red_light"] = float(m["red_violation"])
         sig["stop_sign"] = float(m["stop_violation"])
-        sig["lane_deviation"] = max(0.0, abs(m["lat"]) - st["lane_deadband_m"]) if m["on_street"] else 0.0
+        # distance from the planned path: the lane centre on streets, the
+        # GPS path through the parking lot (this matters: without it nothing
+        # tells the car to follow the curve into the slot until it's too late)
+        sig["lane_deviation"] = max(0.0, abs(m["lat"]) - st["lane_deadband_m"])
         sig["off_road"] = m["offroad_frac"]
         # both parts normalised to [0, 1]: full-throttle -> full-brake in one step
         # is jerk 1.0, the steering wheel at its maximum turning speed is 1.0

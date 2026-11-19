@@ -43,7 +43,7 @@ def parse():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--reward", default="rewards.yaml", help="reward config YAML")
     ap.add_argument("--name", default=None, help="experiment name (folder under experiments/)")
-    ap.add_argument("--minutes", type=float, default=40.0, help="wall-clock training budget")
+    ap.add_argument("--minutes", type=float, default=45.0, help="wall-clock training budget")
     ap.add_argument("--steps", type=int, default=20_000_000, help="max environment steps")
     ap.add_argument("--n-envs", type=int, default=8)
     ap.add_argument("--seed", type=int, default=0)
@@ -164,7 +164,7 @@ def main():
             self.last_print = 0
 
         def _on_step(self):
-            ts = self.num_timesteps + t_offset
+            ts = self.num_timesteps          # restored from the checkpoint on --resume
             for info in self.locals["infos"]:
                 st = info.get("episode_stats")
                 if st is None:
@@ -199,7 +199,7 @@ def main():
                       open(cur_file, "w"), indent=1)
 
         def _on_rollout_end(self):
-            ts = self.num_timesteps + t_offset
+            ts = self.num_timesteps
             r = list(self.recent)
             wall = time.time() - t_start
             row = {"timesteps": ts, "wall_s": round(wall, 1), "stage": tracker.stage,
@@ -208,7 +208,7 @@ def main():
                    "mean_return_100": round(np.mean([e["return"] for e in r]), 2) if r else 0,
                    "collision_rate_100": round(np.mean([e["collision"] for e in r]), 3) if r else 0,
                    "ped_hit_rate_100": round(np.mean([e["ped_hit"] for e in r]), 3) if r else 0,
-                   "fps": int(self.num_timesteps / max(wall, 1e-6))}
+                   "fps": int((self.num_timesteps - start_steps) / max(wall, 1e-6))}
             pr_writer.writerow(row)
             pr_file.flush()
             ep_file.flush()
@@ -219,12 +219,13 @@ def main():
                       f"ret={row['mean_return_100']:7.2f} coll={row['collision_rate_100']:.2f} "
                       f"ped={row['ped_hit_rate_100']:.2f} fps={row['fps']}", flush=True)
 
+    start_steps = model.num_timesteps        # > 0 when resuming
     cb = Cb()
     print(f"[train] experiment '{name}' reward='{reward_cfg['name']}' envs={args.n_envs} "
           f"budget={args.minutes} min -> {out}")
     model.learn(total_timesteps=args.steps, callback=cb, reset_num_timesteps=not args.resume,
                 progress_bar=False)
-    total = model.num_timesteps + (t_offset if args.resume else 0)
+    total = model.num_timesteps
     cb.save_ckpt(total)
     model.save(str(out / "model.zip"))
     venv.save(str(out / "vecnormalize.pkl"))

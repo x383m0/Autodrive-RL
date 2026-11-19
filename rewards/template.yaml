@@ -82,7 +82,7 @@ terms:
     enabled: false
     weight: 0
 
-  # [-] Drifting away from the middle of the lane (every step).
+  # [-] Drifting away from the middle of the lane / the planned path (every step).
   #                                                          suggested: 0.03
   lane_deviation:
     enabled: false
