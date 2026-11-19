@@ -17,7 +17,7 @@ Everything for an experiment goes to experiments/<name>/:
     progress.csv       one row per PPO update (timesteps, stage, success rate, ...)
     curriculum.json    when each curriculum stage was reached
     plots/             training curves
-    videos/            demo episodes rendered after training (mp4 with sound)
+    videos/            demo mp4s (with sound), only with --video
     checkpoints/       periodic checkpoints for --resume (git-ignored)
 """
 from __future__ import annotations
@@ -51,7 +51,9 @@ def parse():
     ap.add_argument("--quick", action="store_true", help="2-minute smoke test, tiny eval")
     ap.add_argument("--resume", action="store_true", help="continue from experiments/<name>/checkpoints")
     ap.add_argument("--start-stage", type=int, default=0)
-    ap.add_argument("--no-video", action="store_true")
+    ap.add_argument("--video", action="store_true",
+                    help="record demo mp4s after training (off by default; use watch.py to view live)")
+    ap.add_argument("--no-video", action="store_true", help=argparse.SUPPRESS)   # old flag, now the default
     ap.add_argument("--video-episodes", type=int, default=2)
     return ap.parse_args()
 
@@ -277,7 +279,7 @@ def main():
         training_plots(out)
     except Exception as e:  # plotting must never kill a finished training run
         print("[train] plotting failed:", e)
-    if not args.no_video:
+    if args.video:
         try:
             from autodrive.video import record_episodes
             record_episodes(out, n=args.video_episodes, stage=tracker.stage, prefix="demo")

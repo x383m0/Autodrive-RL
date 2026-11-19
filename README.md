@@ -27,12 +27,40 @@ python train.py --reward rewards.yaml --name smoke --quick
 # real training run (45 minutes on a 4-core CPU)
 python train.py --reward rewards.yaml --name balanced
 
-# test it on 100 cities it has never seen (+ failure videos)
+# watch a trained car drive LIVE in your browser (http://localhost:8000)
+python watch.py --exp experiments/balanced_45min
+
+# test it on 100 cities it has never seen
 python evaluate.py experiments/balanced
 
-# compare two experiments side by side (report, charts, split-screen video)
+# compare two experiments side by side (report + charts)
 python compare.py balanced cautious
 ```
+
+### Watching the car: live, no files
+
+`watch.py` runs the car in a fresh random city after each other and streams
+it to a web page on your own computer, with sound (click **Sound on**),
+pause / speed / next-city / stage buttons, sensor and HUD toggles, and live
+statistics. Nothing is saved to disk.
+
+```bash
+python watch.py --exp experiments/mine --follow     # watch WHILE it trains
+```
+
+`--follow` reloads the newest checkpoint as training saves it (every 250k
+steps), so you can see the car improve. `--host 0.0.0.0` lets a phone or
+another computer on your network watch too.
+
+### Saving videos (optional, off by default)
+
+mp4 files are only written when you ask for them:
+
+| Command | Flag | Saves |
+|---|---|---|
+| `train.py` | `--video` | demo drives into `experiments/<name>/videos/` |
+| `evaluate.py` | `--failure-videos 3` | 3 failed drives into `eval/failures/` |
+| `compare.py` | `--video` | `side_by_side.mp4` |
 
 Continue an interrupted run with `--resume`:
 
@@ -78,8 +106,8 @@ in `autodrive/rewards.py`.
 | `episodes.csv` | one row per training episode: outcome, violations, reward per term |
 | `progress.csv`, `curriculum.json` | learning progress, when each stage was reached |
 | `plots/` | `training_curves.png`, `outcomes.png`, `reward_terms.png` |
-| `videos/` | demo drives (mp4 with sound) |
-| `eval/` | `summary.md`, `summary.json`, `episodes.csv`, `failures/*.mp4` |
+| `videos/` | demo drives (mp4 with sound), only with `--video` |
+| `eval/` | `summary.md`, `summary.json`, `episodes.csv` (+ `failures/*.mp4` with `--failure-videos`) |
 
 ## How it works
 
@@ -116,8 +144,9 @@ two reward presets, and what went wrong along the way.
 Shipped, ready to watch or evaluate:
 
 ```bash
+python watch.py
 python evaluate.py experiments/balanced_45min --n 100
 python compare.py balanced_45min cautious
 ```
 
-Videos: `experiments/balanced_45min/videos/` and `.../eval/failures/`.
+Watch it: `python watch.py` (it uses `experiments/balanced_45min` by default).

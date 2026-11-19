@@ -73,6 +73,10 @@ It has never trained with other cars or pedestrians, and it shows.
 
 ### Videos (mp4 with sound)
 
+These were removed from the working tree to save disk space (they are in the
+git history: `git checkout 9ce6079 -- experiments/balanced_45min/videos`).
+Watch the same model live instead with `python watch.py`.
+
 - `experiments/balanced_45min/videos/demo_traffic_rules_1_seed50000097.mp4` and `_2_seed50000073.mp4`:
   successful drives + parks with no red-light/stop-sign violations (picked from the
   37% that succeeded, so they show the best case)

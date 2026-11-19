@@ -3,7 +3,7 @@
 evaluate.py - test a trained car on cities it has NEVER seen.
 
     python evaluate.py experiments/balanced
-    python evaluate.py experiments/balanced --n 100 --failure-videos 3
+    python evaluate.py experiments/balanced --n 100 --failure-videos 3   # also save 3 failure mp4s
 
 Training draws city seeds from [0, 10,000,000). Evaluation uses seeds starting
 at 50,000,000, so every evaluation city is new. All cities use the hardest
@@ -15,7 +15,7 @@ Writes experiments/<name>/eval/:
     episodes.csv     one row per city
     summary.json     all metrics (machine readable, used by compare.py)
     summary.md       the same, human readable
-    failures/*.mp4   videos of a few failed episodes (with sound)
+    failures/*.mp4   videos of failed episodes, only with --failure-videos N
 """
 from __future__ import annotations
 
@@ -146,7 +146,8 @@ def main():
     ap.add_argument("--n", type=int, default=100, help="number of unseen cities")
     ap.add_argument("--workers", type=int, default=min(4, mp.cpu_count()))
     ap.add_argument("--stage", type=int, default=None, help="curriculum stage (default: hardest)")
-    ap.add_argument("--failure-videos", type=int, default=3)
+    ap.add_argument("--failure-videos", type=int, default=0,
+                    help="save mp4s of this many failed episodes (default 0 = no files)")
     args = ap.parse_args()
 
     from autodrive.curriculum import EVAL_STAGE, STAGES

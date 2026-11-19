@@ -3,15 +3,15 @@
 compare.py - side-by-side report of two experiments.
 
     python compare.py balanced cautious
-    python compare.py experiments/balanced experiments/mine --n 50 --no-video
+    python compare.py experiments/balanced experiments/mine --n 50 --video
 
 Produces experiments/compare/<a>_vs_<b>/:
     report.md          reward settings diff, evaluation metrics side by side,
                        plain-English summary of who does what better
     curves.png         training curves of both runs
     metrics.png        key evaluation metrics as paired bars
-    side_by_side.mp4   both cars driving the SAME unseen city at the same time
-                       (left = a, right = b; stereo sound: left ear = a, right = b)
+    side_by_side.mp4   (only with --video) both cars in the SAME unseen city at the
+                       same time (left = a, right = b; stereo: left ear = a, right = b)
 
 If an experiment has no evaluation yet, it is evaluated first (100 unseen
 cities by default, --n to change).
@@ -260,7 +260,8 @@ def main():
     ap.add_argument("a")
     ap.add_argument("b")
     ap.add_argument("--n", type=int, default=100, help="unseen cities to evaluate on (if not done yet)")
-    ap.add_argument("--no-video", action="store_true")
+    ap.add_argument("--video", action="store_true", help="also render side_by_side.mp4 (off by default)")
+    ap.add_argument("--no-video", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--video-seed", type=int, default=50_000_007)
     args = ap.parse_args()
     a, b = resolve(args.a), resolve(args.b)
@@ -270,7 +271,7 @@ def main():
     rows, srows = reward_diff(a, b)
     plots(a, b, sa, sb, out)
     vid_line = ""
-    if not args.no_video:
+    if args.video:
         print("[compare] rendering side-by-side video ...")
         sts = side_by_side_video(a, b, out, args.video_seed, sa.get("stage", 4))
         vid_line = (f"\n## Side-by-side drive\n\n`side_by_side.mp4`: both cars in the same unseen city "
