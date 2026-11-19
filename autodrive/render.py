@@ -100,6 +100,11 @@ class Renderer:
         self.cur_pose = {}
         self.blink_t = 0.0
         self.frame = 0
+        # two reusable transparent layers (creating full-screen surfaces every
+        # frame was a big part of the render time)
+        self.ov_under = pygame.Surface((width, height), pygame.SRCALPHA)   # route, slot, sensors
+        self.ov_over = pygame.Surface((width, height), pygame.SRCALPHA)    # particles
+        self.text_cache = {}
 
     # ------------------------------------------------------------ sprites
     def _load_img(self, rel):
@@ -469,7 +474,10 @@ class Renderer:
         if self.cam is None:
             self.cam = target.copy()
         else:
-            self.cam = self.cam + (target - self.cam) * 0.12
+            # exponential smoothing that feels the same at any frame rate
+            # (0.12 per frame was tuned at 20 fps)
+            k = 1.0 - (1.0 - 0.12) ** (max(dt, 1e-3) / 0.05)
+            self.cam = self.cam + (target - self.cam) * k
         self.blink_t += dt
         self.frame += 1
         scr = self.screen
@@ -480,10 +488,12 @@ class Renderer:
         scr.fill(C["grass"])
         scr.blit(self.ground, (-ox, -oy))
         # --- route + target slot ------------------------------------------------
+        self.ov_under.fill((0, 0, 0, 0))
         self._route(env)
         # --- sensors --------------------------------------------------------------
         if self.show_sensors:
             self._sensors(env, ax, ay, ath)
+        scr.blit(self.ov_under, (0, 0))
         # --- actors ---------------------------------------------------------------
         for c in env.traffic.cars:
             x, y, th = self._lerp_pose(c.id, c.x, c.y, c.theta, alpha)
@@ -509,7 +519,8 @@ class Renderer:
         # --- HUD -----------------------------------------------------------------
         if self.show_hud:
             self._hud(env)
-        return pygame.surfarray.array3d(scr).swapaxes(0, 1).copy()
+        # raw RGB bytes -> (H, W, 3) array; much faster than surfarray + copy
+        return np.frombuffer(pygame.image.tobytes(scr, "RGB"), np.uint8).reshape(self.H, self.W, 3)
 
     # ------------------------------------------------------------ pieces
     def _skids(self, env, x, y, th):
@@ -557,7 +568,10 @@ class Renderer:
                                                    1.4, 0.2, C["target"]))
 
     def _particles(self, env, dt):
-        surf = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
+        if not self.particles:
+            return
+        surf = self.ov_over
+        surf.fill((0, 0, 0, 0))
         alive = []
         for p in self.particles:
             p.life -= dt
@@ -580,22 +594,20 @@ class Renderer:
         s = np.arange(env.s + 3, min(env.s + 90, route.length), 2.0)
         if len(s) > 1:
             pts = [self.w2s(p) for p in route.pos(s)]
-            surf = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
+            surf = self.ov_under
             for i in range(0, len(pts) - 1, 2):
                 a = int(150 * (1 - i / len(pts)))
                 pygame.draw.line(surf, (*C["route"], a), pts[i], pts[i + 1], 3)
-            self.screen.blit(surf, (0, 0))
         # target slot (pulsing)
         sl = env.slot
         box = [sl["center"][0], sl["center"][1], SLOT_D / 2 - 0.2, SLOT_W / 2 - 0.2, sl["heading"]]
         pulse = 0.5 + 0.5 * math.sin(self.blink_t * 4)
-        surf = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
+        surf = self.ov_under
         pygame.draw.polygon(surf, (*C["target"], int(50 + 50 * pulse)), [self.w2s(c) for c in obb_corners(box)])
         pygame.draw.polygon(surf, (*C["target"], 230), [self.w2s(c) for c in obb_corners(box)], 3)
-        self.screen.blit(surf, (0, 0))
 
     def _sensors(self, env, ax, ay, ath):
-        surf = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
+        surf = self.ov_under
         sens = env.sensors
         # shift ray data to the interpolated pose
         dx, dy, dth = ax - env.car.x, ay - env.car.y, wrap_angle(ath - env.car.theta)
@@ -618,13 +630,11 @@ class Renderer:
             for e, c in zip(ends, env.ray_cls[idx]):
                 if c != CLS_NONE:
                     pygame.draw.circle(surf, (*CLS_COLORS[c], 220), self.w2s(e), 3)
-        self.screen.blit(surf, (0, 0))
 
     def _lights(self, S, pos, th, L, Wd, braking, blinker, agent=False):
         f = np.array([math.cos(th), math.sin(th)])
         r = np.array([-f[1], f[0]])
         p = np.array(pos)
-        glow = pygame.Surface((self.W, self.H), pygame.SRCALPHA) if False else None
         if braking:
             for s in (-1, 1):
                 q = self.w2s(p - f * (L / 2 - 0.15) + r * s * (Wd / 2 - 0.35))
@@ -718,7 +728,13 @@ class Renderer:
         self.screen.blit(s, rect.topleft)
 
     def _text(self, txt, pos, font="small", color=None, anchor="topleft"):
-        img = self.fonts[font].render(txt, True, color or C["hud_fg"])
+        key = (txt, font, color)
+        img = self.text_cache.get(key)
+        if img is None:
+            img = self.fonts[font].render(txt, True, color or C["hud_fg"])
+            if len(self.text_cache) > 3000:
+                self.text_cache.clear()
+            self.text_cache[key] = img
         r = img.get_rect(**{anchor: pos})
         self.screen.blit(img, r)
         return r

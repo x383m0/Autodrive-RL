@@ -7,6 +7,7 @@ watch.py - spectate a trained car LIVE in your browser.
     python watch.py --exp experiments/mine --follow  # watch WHILE it trains: reloads
                                                      # the newest checkpoint automatically
     python watch.py --stage 5 --port 8080
+    python watch.py --fps 60                         # smoother (needs a bit more CPU)
 
 Then open the printed address. The page shows a live video stream, buttons
 (pause, speed, next city, stage, sensors/HUD on/off), running statistics,
@@ -50,7 +51,7 @@ SOUNDS = ROOT / "assets" / "sounds"
 # Simulation thread
 # =====================================================================
 class Spectator:
-    def __init__(self, exp: Path, stage: int | None, follow: bool, quality: int, seed: int):
+    def __init__(self, exp: Path, stage: int | None, follow: bool, quality: int, seed: int, fps: int = 30):
         import torch
         torch.set_num_threads(1)
         from autodrive.curriculum import EVAL_STAGE, STAGES
@@ -60,6 +61,7 @@ class Spectator:
         self.exp = exp
         self.follow = follow
         self.quality = quality
+        self.fps = int(np.clip(fps, 10, 60))
         self.stages = STAGES
         self.stage = EVAL_STAGE if stage is None else stage
         self.policy_mtime = None
@@ -144,53 +146,78 @@ class Spectator:
             self.frame_id += 1
             self.cond.notify_all()
 
+    def _show(self, frame, until):
+        """Publish a frame, then wait until its display time is over."""
+        self._publish(frame)
+        dt = until - time.time()
+        if dt > 0:
+            time.sleep(dt)
+
     def run(self):
-        from autodrive.video import FPS, SUBFRAMES
+        """Simulation + rendering loop.
+
+        The simulation advances in 0.1 s steps. Between two steps we draw
+        several frames with interpolated positions (the renderer's `alpha`),
+        each shown at its own moment, so motion looks smooth at --fps frames
+        per second. At high playback speeds, or on a slow computer, fewer
+        in-between frames are drawn so the simulation keeps up.
+        """
         env, r = self.env, self.env.renderer
         self._new_episode()
         r.begin_step()
-        self._publish(r.draw(env, 1.0, 1.0 / FPS))
+        self._publish(r.draw(env, 1.0, 1.0 / self.fps))
         last_check = time.time()
-        hold = 0
-        done = False
+        render_ms = 10.0                     # running estimate of draw + encode time
+        hold_until = None
         while True:
-            t0 = time.time()
             if self.follow and time.time() - last_check > 5:
                 last_check = time.time()
                 if self._load_policy():
                     self._push({"type": "model", "model": self.policy_src})
             if self.request_new:
                 self.request_new = False
-                done, hold = False, 0
+                hold_until = None
                 self._new_episode()
+            frame_dt = 1.0 / self.fps
             if self.paused:
-                self._publish(r.draw(env, 1.0, 0.0))
-                time.sleep(0.1)
+                self._show(r.draw(env, 1.0, 0.0), time.time() + frame_dt)
                 continue
-            if done:
-                # show the result banner for ~2 s, then the next city
-                hold += 1
-                self._publish(r.draw(env, 1.0, 1.0 / FPS))
-                time.sleep(1.0 / FPS / self.speed)
-                if hold > 2 * FPS:
-                    done, hold = False, 0
+            if hold_until is not None:
+                # show the result banner (particles still animate) for ~2 s
+                self._show(r.draw(env, 1.0, frame_dt), time.time() + frame_dt)
+                if time.time() > hold_until:
+                    hold_until = None
                     self._new_episode()
                 continue
+
+            step_wall = 0.1 / self.speed     # wall-clock time one sim step should take
+            t_step = time.time()
             self.obs, rew, term, trunc, info = env.step(self.policy(self.obs))
             r.begin_step()
+            self.stream_fps = 0.9 * getattr(self, "stream_fps", 0.0) + 0.1 * (
+                (1.0 / max(step_wall, 1e-3)) * max(1, min(int(round(step_wall * self.fps)),
+                                                         int(step_wall / (render_ms / 1000.0 * 1.15)))))
             events = [{"name": e[0], "dist": float(np.linalg.norm(np.asarray(e[1]) - env.car.pos))}
                       for e in env.events if e[0] in ("crash", "ped_hit", "horn", "light_change", "chime")]
             car = env.car
-            for k in range(SUBFRAMES):
-                frame = r.draw(env, (k + 1) / SUBFRAMES, 1.0 / FPS)
-                if k == 0 or k == SUBFRAMES - 1:
-                    self._publish(frame)
             blink = env.blinker() is not None and (r.blink_t % 0.7) < 0.35
             self._push({"type": "state", "speed": round(car.v, 2),
                         "throttle": round(float(np.clip(car.a / 3.5, 0, 1)), 2),
                         "brake": round(float(np.clip(-car.a / 8.0, 0, 1)), 2),
                         "blink": bool(blink), "events": events,
-                        "t": round(env.t, 1), "ret": round(env.ep_return, 2)})
+                        "t": round(env.t, 1), "ret": round(env.ep_return, 2),
+                        "fps": round(getattr(self, "stream_fps", 0.0))})
+            # how many frames fit into this step: target fps, limited by render speed
+            n_sub = max(1, min(int(round(step_wall * self.fps)),
+                               int(step_wall / (render_ms / 1000.0 * 1.15))))
+            for k in range(n_sub):
+                t_r = time.time()
+                frame = r.draw(env, (k + 1) / n_sub, 0.1 / n_sub)
+                self._publish(frame)
+                render_ms = 0.9 * render_ms + 0.1 * (time.time() - t_r) * 1000.0
+                wait = t_step + step_wall * (k + 1) / n_sub - time.time()
+                if wait > 0:
+                    time.sleep(wait)
             if term or trunc:
                 st = info.get("episode_stats") or env.episode_stats()
                 self.episodes += 1
@@ -200,11 +227,7 @@ class Spectator:
                             "time": round(st["time_s"], 1), "episodes": self.episodes,
                             "success_rate": round(ok / len(self.results), 3),
                             "recent": list(self.results)[-12:]})
-                done = True
-            # real-time pacing: one sim step = 0.1 s, divided by the speed factor
-            dt = 0.1 / self.speed - (time.time() - t0)
-            if dt > 0:
-                time.sleep(dt)
+                hold_until = time.time() + 2.0
 
     # --------------------------------------------------------------- controls
     def control(self, q):
@@ -285,6 +308,7 @@ code { color:var(--dim); font-size:12px; word-break:break-all; }
     <div class="row"><span class="dim">Time</span><span id="t">-</span></div>
     <div class="row"><span class="dim">Speed</span><span id="v">-</span></div>
     <div class="row"><span class="dim">Return</span><span id="ret">-</span></div>
+    <div class="row"><span class="dim">Stream</span><span id="fps">-</span></div>
     <h2>Model</h2>
     <code id="model">-</code>
   </aside>
@@ -343,6 +367,7 @@ es.onmessage = (m) => {
     $('t').textContent = d.t.toFixed(1) + ' s';
     $('v').textContent = (d.speed * 3.6).toFixed(0) + ' km/h';
     $('ret').textContent = d.ret.toFixed(1);
+    $('fps').textContent = d.fps + ' fps';
     if (ac && engine) {
       engine.playbackRate.value = 0.55 + d.speed / 20 + 0.12 * d.throttle;
       engGain.gain.value = 0.16 + 0.10 * d.throttle + 0.04 * d.speed / 20;
@@ -454,12 +479,13 @@ def main():
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--host", default="127.0.0.1", help="0.0.0.0 = reachable from your network")
     ap.add_argument("--quality", type=int, default=80, help="JPEG quality of the stream")
+    ap.add_argument("--fps", type=int, default=30, help="frames per second of the stream (10-60)")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
     exp = Path(args.exp)
     if not exp.exists():
         exp = ROOT / "experiments" / args.exp
-    sp = Spectator(exp.resolve(), args.stage, args.follow, args.quality, args.seed)
+    sp = Spectator(exp.resolve(), args.stage, args.follow, args.quality, args.seed, args.fps)
     threading.Thread(target=sp.run, daemon=True).start()
     srv = ThreadingHTTPServer((args.host, args.port), make_handler(sp))
     srv.daemon_threads = True

@@ -50,7 +50,8 @@ python watch.py --exp experiments/mine --follow     # watch WHILE it trains
 
 `--follow` reloads the newest checkpoint as training saves it (every 250k
 steps), so you can see the car improve. `--host 0.0.0.0` lets a phone or
-another computer on your network watch too.
+another computer on your network watch too. The stream runs at 30 fps by
+default; `--fps 60` is smoother (the side panel shows the real frame rate).
 
 ### Saving videos (optional, off by default)
 

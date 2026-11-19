@@ -21,7 +21,7 @@ import numpy as np
 
 from .audio import SR, SoundBank, mix_soundtrack, write_wav
 
-SUBFRAMES = 2
+SUBFRAMES = 3                  # frames drawn per 0.1 s sim step -> 30 fps videos
 FPS = 10 * SUBFRAMES
 
 
