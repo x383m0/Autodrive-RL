@@ -238,7 +238,7 @@ class Game:
         lib = {x["id"]: x for x in self.library}
         user = {"format": 2, "name": f"level{lid}",
                 "terms": {k: {"enabled": True, "weight": float(v)} for k, v in recipe.get("terms", {}).items()
-                          if k in TERMS},
+                          if k in TERMS and k in BY_ID[lid]["terms"]},          # only this level's rewards
                 "custom": [{k: lib[i][k] for k in ("name", "when", "give", "times", "paid")}
                            for i in recipe.get("custom_ids", []) if i in lib]}
         return parse_config(user, "your design", allow_empty=True)
@@ -352,6 +352,8 @@ def catalog():
     """Everything the page needs to build the workshop (no default numbers)."""
     return {
         "levels": [{"id": lv["id"], "name": lv["name"], "brief": lv["brief"], "available": lv["available"],
+                    "terms": lv["terms"],
+                    "new_terms": [t for t in lv["terms"] if lv["id"] > 1 and t not in BY_ID[lv["id"] - 1]["terms"]],
                     "score": lv["score"], "rules": bool(lv.get("rules")), "minutes": lv["minutes"],
                     "stars": list(lv["stars"])} for lv in LEVELS],
         "terms": [{"name": k, "paid": "once" if TERMS[k][1] == "event" else "every step",

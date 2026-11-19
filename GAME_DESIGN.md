@@ -42,8 +42,12 @@ for passing score thresholds; 1 star unlocks the next level.
 
 - Every visit to a level starts with an **empty** reward list ("Load my best
   recipe" restores your best one).
-- **+ Add reward** lists all 18 built-in rewards (every level, no unlocking),
-  your custom rewards, and "Create custom reward...". No suggested numbers.
+- **+ Add reward** lists the level's built-in rewards, your custom rewards,
+  and "Create custom reward...". No suggested numbers. 12 built-in rewards
+  are available from level 1; rewards about things that appear later unlock
+  in that level (with a "new" badge): speeding, red light, stop sign at
+  level 5; pedestrian hit, pedestrian proximity, crosswalk yield at level 6.
+- Number fields use styled -/+ buttons (step scales with the number).
 - The number you type is **the points given** (any sign).
 - **Custom rewards**: rule builder with AND-boxes joined by OR, a fixed or
   "x measurement" amount, paid every step or each time it becomes true;

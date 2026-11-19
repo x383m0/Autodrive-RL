@@ -44,11 +44,17 @@ def _park_lessons(bands, advance=0.6):
 _ROAD = dict(world="road", lot_occ=0.3)
 _PAD = dict(world="road", pad_only=True, lot_occ=0.4)      # level 1: just a parking pad
 
-TERMS_1 = ["progress", "goal_reached", "parking_precision", "collision", "off_route", "stall",
-           "stuck", "time", "speed_bonus"]
-TERMS_2 = TERMS_1 + ["off_road", "lane_deviation", "comfort"]
-TERMS_5 = TERMS_2 + ["speeding", "red_light", "stop_sign"]
-TERMS_6 = TERMS_5 + ["pedestrian_hit", "pedestrian_proximity", "crosswalk_yield"]
+# Built-in rewards available in a level. Most are there from level 1; rewards
+# about things that only exist later appear in the level that introduces them:
+#   level 5 (traffic rules): speeding, red_light, stop_sign
+#   level 6 (pedestrians):   pedestrian_hit, pedestrian_proximity, crosswalk_yield
+_RULE_TERMS = ["speeding", "red_light", "stop_sign"]
+_PED_TERMS = ["pedestrian_hit", "pedestrian_proximity", "crosswalk_yield"]
+TERMS_1 = ["progress", "goal_reached", "parking_precision", "collision", "off_route", "off_road",
+           "lane_deviation", "comfort", "stall", "stuck", "time", "speed_bonus"]
+TERMS_2 = TERMS_1
+TERMS_5 = TERMS_1 + _RULE_TERMS
+TERMS_6 = TERMS_5 + _PED_TERMS
 
 LEVELS = [
     dict(id=1, name="Park here", available=True, score="precision", minutes=3,
