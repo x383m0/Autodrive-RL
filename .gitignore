@@ -14,3 +14,8 @@ experiments/*/eval/failures_extra/
 *.tmp.mp4
 *.tmp.wav
 scratch/
+
+# Experiment output is ignored by default (it changes constantly while training).
+# Finished runs worth keeping are added explicitly with `git add -f`, e.g.
+#   git add -f experiments/balanced/{model.zip,vecnormalize.pkl,*.csv,*.yaml,*.json} experiments/balanced/plots
+experiments/
