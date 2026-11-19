@@ -54,6 +54,11 @@ def parse():
     ap.add_argument("--quick", action="store_true", help="2-minute smoke test, tiny eval")
     ap.add_argument("--resume", action="store_true", help="continue from experiments/<name>/checkpoints")
     ap.add_argument("--start-stage", type=int, default=0)
+    ap.add_argument("--max-stage", type=int, default=None,
+                    help="never advance the curriculum beyond this stage (used by game levels)")
+    ap.add_argument("--init-from", default=None,
+                    help="start from another experiment's trained car (folder with model.zip) "
+                         "instead of from scratch")
     ap.add_argument("--video", action="store_true",
                     help="record demo mp4s after training (off by default; use watch.py to view live)")
     ap.add_argument("--no-video", action="store_true", help=argparse.SUPPRESS)   # old flag, now the default
@@ -138,7 +143,7 @@ def main():
                         "train_args": vars(args)}, f, sort_keys=False)
 
     # ---- curriculum state ----------------------------------------------------
-    tracker = CurriculumTracker(start_stage=args.start_stage)
+    tracker = CurriculumTracker(start_stage=args.start_stage, max_stage=args.max_stage)
     t_offset = 0
     cur_file = out / "curriculum.json"
     if args.resume and cur_file.exists():
@@ -151,8 +156,13 @@ def main():
 
     venv = SubprocVecEnv([make_env_fn(reward_cfg, tracker.stage, i, args.seed + int(time.time()) % 1000 * args.resume)
                           for i in range(args.n_envs)])
-    if args.resume and (ckpt_dir / "vecnormalize.pkl").exists():
-        venv = VecNormalize.load(str(ckpt_dir / "vecnormalize.pkl"), ScaleReward(venv, REWARD_SCALE))
+    init = Path(args.init_from) if args.init_from else None
+    if init is not None and not (init / "model.zip").exists():
+        sys.exit(f"--init-from: no model.zip in {init}")
+    norm_src = (ckpt_dir if args.resume and (ckpt_dir / "vecnormalize.pkl").exists()
+                else init if init is not None else None)
+    if norm_src is not None:
+        venv = VecNormalize.load(str(norm_src / "vecnormalize.pkl"), ScaleReward(venv, REWARD_SCALE))
         venv.norm_reward = False
         venv.training = True
     else:
@@ -162,6 +172,10 @@ def main():
     if args.resume and (ckpt_dir / "model.zip").exists():
         model = PPO.load(str(ckpt_dir / "model.zip"), env=venv, device="cpu")
         print("[resume] loaded checkpoint model")
+    elif init is not None:
+        model = PPO.load(str(init / "model.zip"), env=venv, device="cpu")
+        model.num_timesteps = 0
+        print(f"[train] starting from the car in {init}")
     else:
         model = PPO(
             "MlpPolicy", venv, device="cpu", seed=args.seed,

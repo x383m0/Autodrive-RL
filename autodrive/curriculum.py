@@ -60,8 +60,9 @@ EVAL_STAGE = len(STAGES) - 1
 class CurriculumTracker:
     """Keeps a rolling success rate for the current stage and decides when to advance."""
 
-    def __init__(self, window=100, min_episodes=100, start_stage=0):
+    def __init__(self, window=100, min_episodes=100, start_stage=0, max_stage=None):
         self.stage = start_stage
+        self.max_stage = len(STAGES) - 1 if max_stage is None else min(max_stage, len(STAGES) - 1)
         self.window = window
         self.min_episodes = min_episodes
         self.results = deque(maxlen=window)
@@ -76,7 +77,7 @@ class CurriculumTracker:
         return sum(self.results) / len(self.results) if self.results else 0.0
 
     def should_advance(self):
-        return (self.stage < len(STAGES) - 1 and len(self.results) >= self.min_episodes
+        return (self.stage < self.max_stage and len(self.results) >= self.min_episodes
                 and self.rate >= STAGES[self.stage]["advance"])
 
     def advance(self, timestep):
