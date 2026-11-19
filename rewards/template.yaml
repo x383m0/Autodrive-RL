@@ -118,6 +118,13 @@ terms:
     enabled: false
     weight: 0
 
+  # [-] Standing still for 12 seconds for no reason. Ends the trip.
+  #     Stops the car from "freezing" whenever it gets into trouble.
+  #                                                          suggested: 20
+  stuck:
+    enabled: false
+    weight: 0
+
   # [+] Points for raw speed, no matter where the car goes.
   #     WARNING: a classic trap - the car may learn to drive in fast circles.
   #     Fun to try on purpose and watch the cheat detector catch it.
@@ -133,5 +140,6 @@ settings:
   ped_proximity_radius_m: 4.0   # how close (m) to a pedestrian before it counts
   stall_speed_ms: 0.5           # slower than this (m/s) counts as standing still
   off_route_distance_m: 6.0     # how far (m) off the route before the trip ends
+  stuck_seconds: 12.0           # standing still this long (no reason) = stuck
   terminate_on_red_light: false # true = running a red light ends the trip
   terminate_on_stop_sign: false # true = rolling a stop sign ends the trip

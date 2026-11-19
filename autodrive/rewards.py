@@ -48,6 +48,7 @@ TERMS = {
     "stall":                (-1, "step",  "standing still with no reason to"),
     "time":                 (-1, "step",  "flat cost per step (hurry up)"),
     "off_route":            (-1, "event", "left the route by > off_route_distance (episode ends)"),
+    "stuck":                (-1, "event", "stood still for stuck_seconds with no reason (episode ends)"),
     "speed_bonus":          (+1, "step",  "raw speed, regardless of direction (HACKABLE!)"),
 }
 
@@ -57,6 +58,7 @@ DEFAULT_SETTINGS = {
     "ped_proximity_radius_m": 4.0,
     "stall_speed_ms": 0.5,
     "off_route_distance_m": 6.0,
+    "stuck_seconds": 12.0,
     "terminate_on_red_light": False,
     "terminate_on_stop_sign": False,
 }
@@ -78,6 +80,7 @@ DEFAULT_TERMS = {
     "stall": dict(enabled=True, weight=0.03),
     "time": dict(enabled=True, weight=0.005),
     "off_route": dict(enabled=True, weight=20.0),
+    "stuck": dict(enabled=True, weight=20.0),
     "speed_bonus": dict(enabled=False, weight=0.02),
 }
 
@@ -201,6 +204,7 @@ class RewardComputer:
         sig["stall"] = float(m["speed"] < st["stall_speed_ms"] and not m["legit_wait"])
         sig["time"] = 1.0
         sig["off_route"] = float(m["off_route"])
+        sig["stuck"] = float(m["stuck"])
         sig["speed_bonus"] = m["speed"]
         return sig
 

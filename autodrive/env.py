@@ -208,15 +208,20 @@ class AutoDriveEnv(gym.Env):
         for k, v in parts.items():
             self.ep[k] += v
 
-        terminated = bool(m["collision"] or m["ped_hit"] or m["off_route"] or m["parked"])
+        # Being stuck ENDS the episode (it is a failure, not a time-out). If it
+        # only truncated the episode, freezing would be the cheapest way out
+        # of any mistake - the agent learned exactly that. See REWARD_GUIDE 4.7.
+        terminated = bool(m["collision"] or m["ped_hit"] or m["off_route"] or m["parked"]
+                          or m["stuck"])
         st = self.reward_cfg["settings"]
         if m["red_violation"] and st["terminate_on_red_light"]:
             terminated = True
         if m["stop_violation"] and st["terminate_on_stop_sign"]:
             terminated = True
-        stuck = self.idle_steps > int(12 / DT)
-        truncated = (not terminated) and (self.steps >= self.max_steps or stuck)
-        if m["parked"]:
+        truncated = (not terminated) and self.steps >= self.max_steps
+        if m["stuck"] and not m["parked"]:
+            self.status = "stuck"
+        elif m["parked"]:
             self.status = "parked"
             self.events.append(("chime", car.pos.copy()))
         elif m["collision"]:
@@ -228,7 +233,7 @@ class AutoDriveEnv(gym.Env):
         elif m["off_route"]:
             self.status = "off_route"
         elif truncated:
-            self.status = "stuck" if stuck else "timeout"
+            self.status = "timeout"
 
         self.last_action = action
         obs = self._observe()
@@ -418,7 +423,8 @@ class AutoDriveEnv(gym.Env):
         if car.v > 4 and car.a < -5.0:
             self.events.append(("skid", car.pos.copy()))
 
-        return dict(ds=ds, parked=parked, park_err=park_err, collision=coll, ped_hit=ped_hit,
+        stuck = self.idle_steps > int(self.reward_cfg["settings"]["stuck_seconds"] / DT)
+        return dict(ds=ds, parked=parked, stuck=stuck, park_err=park_err, collision=coll, ped_hit=ped_hit,
                     ped_close=ped_close, crosswalk_violation=cw_violation, speed=car.v,
                     limit=limit, red_violation=red_v, stop_violation=stop_v, lat=lat,
                     on_street=on_street, offroad_frac=offroad, jerk=jerk,

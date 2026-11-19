@@ -114,6 +114,13 @@ terms:
     enabled: true
     weight: 20.0
 
+  # [-] One-off: standing still for stuck_seconds with no reason (no red
+  #     light, stop sign, car or pedestrian ahead). Ends the episode.
+  #     Without this, "freeze when in trouble" is a cheap way out of mistakes.
+  stuck:
+    enabled: true
+    weight: 20.0
+
   # [+] Per step: raw speed in m/s, no matter where you go.
   #     DANGER: this is a classic reward-hacking bait (drive in circles fast).
   #     Leave it off unless you want to see an exploit.
@@ -127,5 +134,6 @@ settings:
   ped_proximity_radius_m: 4.0   # pedestrian_proximity starts at this distance
   stall_speed_ms: 0.5           # below this speed you count as "standing still"
   off_route_distance_m: 6.0     # leaving the route by more than this ends the episode
+  stuck_seconds: 12.0           # idle this long without a reason = stuck (episode ends)
   terminate_on_red_light: false # true = running a red light ends the episode
   terminate_on_stop_sign: false # true = rolling a stop sign ends the episode
