@@ -56,12 +56,13 @@ rule. That is not a bug in the car; it's the deal you offered it.
 | `speeding` | - step | m/s over limit + tolerance | 0.05 | 0.02-0.3 | speeds | drives well under the limit |
 | `red_light` | - event | crossed stop line on red | 20 | 10-100 | runs reds | brakes hard at every yellow |
 | `stop_sign` | - event | didn't stop (< 0.5 m/s) | 10 | 5-50 | rolls stops | — |
-| `lane_deviation` | - step | metres from lane centre beyond deadband | 0.03 | 0.01-0.1 | wobbles, cuts corners | twitchy steering |
+| `lane_deviation` | - step | metres from the lane centre / planned path beyond deadband | 0.03 | 0.01-0.1 | wobbles, cuts corners | twitchy steering |
 | `off_road` | - step | share of the car on sidewalk/grass | 0.2 | 0.1-1 | sidewalk shortcuts | — |
 | `comfort` | - step | jerk + steering speed (each 0-1) | 0.01 | 0-0.05 | jerky ride | **sits still** (see 4.1) |
 | `stall` | - step | stopped without a reason | 0.03 | 0.01-0.1 | parks on the road | creeps through red lights?* |
 | `time` | - step | flat cost of existing | 0.005 | 0-0.02 | dawdles | rushes, risks more |
 | `off_route` | - event | > 6 m from the route, ends episode | 20 | 10-50 | wanders off | — |
+| `stuck` | - event | idle 12 s with no reason, ends episode | 20 | 10-50 | **freezes when in trouble** (4.7) | — |
 | `speed_bonus` | + step | raw speed anywhere | off | off! | — | drives fast circles (see 4.3) |
 
 \* `stall` never punishes legitimate waiting (red light, stop sign, car or
@@ -111,6 +112,14 @@ A reward that is never experienced teaches nothing. Fixes used here:
 - **Reverse curriculum**: the first lessons start the car right in front of
   its slot (1-6 m away, 100% success after ~2 minutes), then further back each
   lesson. Measured: starting 2-40 m away gave <5% success after 8 minutes.
+  Each lesson's start band must overlap the previous one only a little: with
+  a wide band (1-16 m) the car passed on the easy starts alone and never
+  learned the hard part (0 of 38 from 15-25 m).
+- **Make the task learnable within the budget**: turning into a 90 or 60
+  degree side slot (with no reverse gear to fix a crooked approach) stalled
+  at 30-45% success after 45 minutes. The shipped lot uses bays at the end
+  of the aisle, reached with a gentle S-curve: all four parking lessons
+  passed in ~3 minutes. Sometimes the right fix is the task, not the reward.
 - **Make "almost right" better than "very wrong"**: progress now counts
   driving past the slot as going backwards, so the best place to be is
   exactly at the slot. That makes stopping there the natural thing to do.
@@ -118,7 +127,16 @@ A reward that is never experienced teaches nothing. Fixes used here:
   walking pace in the last metres before the slot, and the speeding term
   then teaches a smooth stop.
 
-### 4.5 Penalties that can be dodged
+### 4.5 Every part of the task needs a guiding signal
+
+`lane_deviation` used to be switched off inside the parking lot. On the
+streets it constantly nudged the car back to its path; in the lot nothing
+did, until the very end (park or not). The car under-steered into the
+parking bay, arrived crooked, and the failure came far too late to teach it
+anything about the steering two seconds earlier. Dense signals (a little
+reward/penalty every step) teach much faster than one verdict at the end.
+
+### 4.6 Penalties that can be dodged
 
 If a penalty only fires on an exact event, the agent learns to avoid the
 *event*, not the behaviour. Example: a "red light" penalty that only checks
@@ -126,7 +144,19 @@ the instant you cross the line encourages stopping a few cm past it. Write
 signals so that the cheapest way to avoid the penalty is the behaviour you
 want.
 
-### 4.6 Ending the episode is also a reward
+### 4.7 "Freeze when in trouble": how an episode ends matters
+
+In the traffic-rules stage, training went BACKWARDS: success fell from 24% to
+0%. The car had learned to stop dead whenever it was about to mess up a turn.
+Why: going off route cost -20, but standing still cost only a little `stall`
+penalty, after which the episode was simply cut off ("stuck") with no
+further cost. Freezing was the cheapest way out of every mistake.
+
+Fix: being stuck is now a real failure that ends the episode with the
+`stuck` penalty (same size as `off_route`). Rule: every way an episode can
+fail should cost at least as much as the honest attempt that failed.
+
+### 4.8 Ending the episode is also a reward
 
 A terminating penalty (`collision`, `off_route`) also takes away all future
 rewards. If the future is very negative (e.g. a huge time penalty), dying
