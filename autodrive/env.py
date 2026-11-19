@@ -58,8 +58,10 @@ class AutoDriveEnv(gym.Env):
     metadata = {"render_modes": ["rgb_array"], "render_fps": 10}
 
     def __init__(self, reward_config=None, stage=0, frame_stack=4, render_mode=None,
-                 replay_prob=0.3, seed_range=(0, 10_000_000), audio_events=False):
+                 replay_prob=0.3, seed_range=(0, 10_000_000), audio_events=False, stages=None):
         super().__init__()
+        # the list of curriculum stages (game levels bring their own)
+        self.stages = stages if stages is not None else STAGES
         if reward_config is None or isinstance(reward_config, str):
             reward_config = load_reward_config(reward_config)
         self.reward_cfg = reward_config
@@ -98,7 +100,7 @@ class AutoDriveEnv(gym.Env):
         self.city_seed = city_seed
         rng = np.random.default_rng(city_seed)
         self.rng = rng
-        p = dict(STAGES[stage])
+        p = dict(self.stages[stage])
         p.update(options.get("overrides", {}))
         self.params = p
         scenario = options.get("scenario")
@@ -118,14 +120,26 @@ class AutoDriveEnv(gym.Env):
     def _build_world(self, p, rng, start_edge=None, start_s=None, between_cars=False,
                      city=None):
         """Create city, route, agent, traffic and pedestrians for stage params p."""
-        nx, ny = p["grid"]
-        self.city = city or City(rng, nx, ny, controls=p["controls"], parked_prob=p["parked"],
-                                 school_prob=p["school"], lot_occupancy=p["lot_occ"])
+        if city is not None:
+            self.city = city
+        elif p.get("world") == "road":
+            from .worlds import RoadWorld          # single empty road (game levels 2-3)
+            self.city = RoadWorld(rng, length=p.get("road_len", (160, 240)), bends=p.get("bends", 0),
+                                  lot_occupancy=p["lot_occ"])
+        else:
+            nx, ny = p["grid"]
+            self.city = City(rng, nx, ny, controls=p["controls"], parked_prob=p["parked"],
+                             school_prob=p["school"], lot_occupancy=p["lot_occ"])
         if self.city.target_slot is None:
             self.city.choose_target_slot(rng, between_cars=between_cars or rng.random() < 0.3)
         self.route, self.start_edge = self.city.build_route(rng, *p["hops"],
                                                             start_edge=start_edge,
                                                             start_s=start_s)
+        if p.get("no_limits"):
+            # game rule: no speed limits on the streets, except school zones
+            # (the parking lot keeps its creeping speed)
+            on_street = self.route.s < self.route.in_lot_s
+            self.route.limits = np.where(on_street & ~self.route.school, 30.0, self.route.limits)
         # The posted speed tapers to walking pace in the last metres before the
         # slot (like creeping into a parking space): v <= 0.3 + sqrt(2 * 0.8 * d).
         togo = self.route.length - self.route.s
@@ -154,6 +168,7 @@ class AutoDriveEnv(gym.Env):
         hint = int(np.searchsorted(self.route.s, self.route.s[-1] - 60)) if self.params.get("start_togo") else 0
         self.s, self.lat, self.route_idx = self.route.project(self.car.pos, max(hint, 0), window=400)
         self.best_s = self.s
+        self.start_s = self.s                # where this drive started along the route
         self.idle_steps = 0
         self.max_steps = int(((self.route.length - self.s) / 4.0 + 40.0) / DT)
         self.last_action = np.zeros(2)

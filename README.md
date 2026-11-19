@@ -15,7 +15,19 @@ Everything (city, physics, traffic, pedestrians, sensors, renderer, sound) is
 written from scratch in Python with Gymnasium + Stable-Baselines3 + pygame.
 CPU only.
 
-## Quick start
+## Play: Reward Designer (the game)
+
+```bash
+python game.py          # then open http://localhost:8000
+```
+
+Level by level you design the car's reward (switches and weights, no code),
+choose how long to train, watch it learn live, and a hidden test on new roads
+gives you points and stars. 1 star unlocks the next level. Levels 1-5 are
+playable now (park, straight road, bends, into town, rules of the road);
+levels 6-11 are coming (see `GAME_DESIGN.md`).
+
+## Quick start (without the game)
 
 ```bash
 python -m venv .venv && source .venv/bin/activate

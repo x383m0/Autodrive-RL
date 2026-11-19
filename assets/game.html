@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reward Designer</title>
+<style>
+:root { --bg:#0e1014; --panel:#171a21; --panel2:#1d2129; --line:#2a2f3a; --fg:#e8eaee; --dim:#9aa1ad;
+        --ok:#5cc878; --bad:#e8584f; --warn:#f0a43c; --accent:#4aa3ff; --gold:#f5c542; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
+header { display:flex; align-items:center; gap:14px; padding:10px 18px; border-bottom:1px solid var(--line); }
+header h1 { font-size:17px; margin:0; letter-spacing:.06em; }
+header .total { margin-left:auto; color:var(--gold); font-weight:600; }
+button, select, input[type=number] { background:var(--panel2); color:var(--fg); border:1px solid var(--line);
+  border-radius:8px; padding:6px 10px; font:inherit; }
+button { cursor:pointer; } button:hover:not(:disabled) { border-color:var(--accent); }
+button:disabled { opacity:.45; cursor:default; }
+button.primary { background:var(--accent); border-color:var(--accent); color:#06121f; font-weight:700; padding:9px 18px; }
+button.danger { border-color:var(--bad); color:var(--bad); }
+.layout { display:grid; grid-template-columns:230px minmax(0,1fr); gap:16px; padding:16px; }
+@media (max-width: 1000px) { .layout { grid-template-columns:1fr; } }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
+.levels { display:flex; flex-direction:column; gap:6px; align-self:start; }
+.lvl { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:9px; border:1px solid transparent; cursor:pointer; }
+.lvl:hover { background:var(--panel2); }
+.lvl.sel { border-color:var(--accent); background:var(--panel2); }
+.lvl.locked { opacity:.45; cursor:default; }
+.lvl .num { width:26px; height:26px; border-radius:50%; background:var(--panel2); display:grid; place-items:center; font-weight:700; font-size:12px; }
+.lvl .nm { flex:1; } .lvl .st { color:var(--gold); font-size:12px; letter-spacing:1px; }
+.soon { font-size:10px; color:var(--dim); border:1px solid var(--line); border-radius:6px; padding:0 5px; }
+.main { display:flex; flex-direction:column; gap:14px; min-width:0; }
+.title { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+.title h2 { margin:0; font-size:22px; }
+.dim { color:var(--dim); }
+.chips { display:flex; gap:6px; flex-wrap:wrap; }
+.chip { font-size:12px; padding:2px 8px; border-radius:7px; background:var(--panel2); border:1px solid var(--line); }
+.grid2 { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); gap:14px; }
+@media (max-width: 1250px) { .grid2 { grid-template-columns:1fr; } }
+table { width:100%; border-collapse:collapse; }
+td { padding:6px 4px; border-top:1px solid var(--line); vertical-align:middle; }
+td.nm { font-weight:600; white-space:nowrap; }
+td.help { color:var(--dim); font-size:12px; }
+.sign { display:inline-block; width:18px; text-align:center; font-weight:800; }
+.sign.p { color:var(--ok); } .sign.m { color:var(--bad); }
+.new { font-size:10px; color:#06121f; background:var(--gold); border-radius:5px; padding:0 4px; margin-left:4px; }
+input[type=range] { width:110px; accent-color:var(--accent); }
+input[type=number] { width:82px; }
+.switch { position:relative; width:34px; height:20px; display:inline-block; }
+.switch input { display:none; }
+.switch span { position:absolute; inset:0; background:#333a46; border-radius:20px; transition:.15s; cursor:pointer; }
+.switch span:before { content:""; position:absolute; width:14px; height:14px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.15s; }
+.switch input:checked + span { background:var(--accent); } .switch input:checked + span:before { transform:translateX(14px); }
+tr.off td:not(:first-child) { opacity:.45; }
+.trainbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:12px; }
+#view { width:100%; border-radius:10px; border:1px solid var(--line); background:#000; display:block; }
+.viewctl { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center; }
+.bar { height:8px; background:var(--panel2); border-radius:6px; overflow:hidden; }
+.bar > div { height:100%; background:var(--accent); width:0; transition:width .3s; }
+svg.chart { width:100%; height:110px; display:block; }
+.big { font-size:42px; font-weight:800; }
+.stars { color:var(--gold); font-size:26px; letter-spacing:3px; }
+.drives { display:flex; gap:4px; align-items:flex-end; height:70px; margin:8px 0; }
+.drives div { flex:1; border-radius:4px 4px 0 0; min-height:3px; }
+.hint { padding:7px 10px; background:var(--panel2); border-left:3px solid var(--warn); border-radius:6px; margin:6px 0; }
+.log { font:11px/1.4 ui-monospace, monospace; color:var(--dim); white-space:pre-wrap; max-height:90px; overflow:auto; }
+.legend { display:flex; gap:12px; font-size:12px; color:var(--dim); flex-wrap:wrap; }
+.legend i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:4px; vertical-align:-1px; }
+</style></head>
+<body>
+<header><h1>REWARD DESIGNER</h1><span class="dim">teach a self-driving car by designing what it is rewarded for</span>
+  <span class="total" id="total">★ 0</span></header>
+<div class="layout">
+  <nav class="card levels" id="levels"></nav>
+  <div class="main">
+    <section class="card">
+      <div class="title"><h2 id="lvTitle">-</h2><span class="dim" id="lvScore"></span></div>
+      <p id="lvBrief" style="margin:8px 0 6px"></p>
+      <div class="chips" id="lvStars"></div>
+    </section>
+    <div class="grid2">
+      <section class="card" id="workshop">
+        <div class="title"><h2 style="font-size:16px">Reward workshop</h2>
+          <span class="dim">switch terms on and choose weights</span>
+          <button id="loadBest" style="margin-left:auto" hidden>Load my best recipe</button></div>
+        <table id="terms"></table>
+        <div class="trainbar">
+          <label>Training time <input type="range" id="minutes" min="1" max="45" step="1"> <b id="minutesLbl"></b> min</label>
+          <label id="initWrap" hidden><input type="checkbox" id="initPrev"> start from my best car of the previous level</label>
+          <button class="primary" id="train" style="margin-left:auto">Train</button>
+        </div>
+        <div id="msg" class="dim" style="margin-top:6px"></div>
+      </section>
+      <section class="card">
+        <div class="title"><h2 style="font-size:16px" id="viewTitle">Live view</h2><span class="dim" id="viewSub"></span></div>
+        <img id="view" src="/stream.mjpg" alt="live view of the car">
+        <div class="viewctl">
+          <button id="sound">Sound on</button>
+          <span class="dim">Speed</span>
+          <select id="speed"><option value="0.5">0.5</option><option value="1" selected>1</option><option value="2">2</option><option value="4">4</option></select>
+          <button id="next">Next road</button>
+        </div>
+        <div id="trainBox" hidden style="margin-top:12px">
+          <div class="title"><b id="phaseLbl">Training</b><span class="dim" id="stageLbl"></span>
+            <button class="danger" id="stop" style="margin-left:auto">Stop and test now</button></div>
+          <div class="bar" style="margin:8px 0"><div id="timebar"></div></div>
+          <div class="dim" id="timeLbl"></div>
+          <svg class="chart" id="chart" viewBox="0 0 400 110" preserveAspectRatio="none"></svg>
+          <div class="dim" style="font-size:12px">Parked during training (% of the last 100 practice drives)</div>
+          <div class="log" id="log"></div>
+        </div>
+      </section>
+    </div>
+    <section class="card" id="results" hidden>
+      <div class="title"><h2 style="font-size:16px">Test results</h2><span class="dim">12 roads the car has never seen</span></div>
+      <div style="display:flex; gap:28px; align-items:center; flex-wrap:wrap">
+        <div><div class="big" id="score">-</div><div class="dim">points (average)</div></div>
+        <div class="stars" id="resStars"></div>
+        <div id="newBest" class="chip" hidden style="color:var(--gold)">New best!</div>
+      </div>
+      <div class="drives" id="drives"></div>
+      <div class="legend"><span><i style="background:var(--ok)"></i>parked</span><span><i style="background:var(--bad)"></i>crash</span>
+        <span><i style="background:var(--warn)"></i>lost / stuck / too slow</span><span>bar height = points</span></div>
+      <h3 style="font-size:14px; margin:14px 0 4px">Hints</h3>
+      <div id="hints"></div>
+    </section>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+let LEVELS = [], SEL = 1, STATE = null, lastPhase = null;
+const post = (u, b) => fetch(u, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b||{})}).then(r => r.json());
+const starStr = n => '★'.repeat(n) + '☆'.repeat(3 - n);
+
+async function loadLevels() {
+  LEVELS = (await (await fetch('/api/levels')).json()).levels;
+}
+function prog(id) { return (STATE && STATE.progress[String(id)]) || {}; }
+
+function renderLevels() {
+  const nav = $('levels'); nav.innerHTML = '';
+  let total = 0;
+  for (const lv of LEVELS) {
+    const p = prog(lv.id); total += p.stars || 0;
+    const d = document.createElement('div');
+    const open = lv.available && lv.unlocked;
+    d.className = 'lvl' + (lv.id === SEL ? ' sel' : '') + (open ? '' : ' locked');
+    d.innerHTML = `<span class="num">${lv.id}</span><span class="nm">${lv.name}</span>` +
+      (lv.available ? (lv.unlocked ? `<span class="st">${starStr(p.stars || 0)}</span>` : '<span>🔒</span>')
+                    : '<span class="soon">soon</span>');
+    if (open) d.onclick = () => selectLevel(lv.id);
+    nav.appendChild(d);
+  }
+  $('total').textContent = '★ ' + total + ' / ' + 3 * LEVELS.filter(l => l.available).length;
+}
+
+function renderHeader() {
+  const lv = LEVELS.find(l => l.id === SEL);
+  const p = prog(lv.id);
+  $('lvStars').innerHTML = lv.stars.map((t, i) => `<span class="chip">${'★'.repeat(i + 1)} ${t}+</span>`).join('') +
+    (p.best !== undefined ? `<span class="chip">your best: <b>${p.best}</b></span>` : '') +
+    (p.attempts ? `<span class="chip">attempts: ${p.attempts}</span>` : '');
+  $('loadBest').hidden = !p.best_weights;
+}
+function renderLevel() {
+  const lv = LEVELS.find(l => l.id === SEL);
+  $('lvTitle').textContent = `Level ${lv.id}: ${lv.name}`;
+  $('lvBrief').textContent = lv.brief;
+  $('lvScore').textContent = lv.score === 'precision'
+    ? 'Score: distance 400 + parking 400 + precision 200'
+    : 'Score: distance 400 + parking 400 + speed 200' + (lv.rules ? ' - rule penalties' : '');
+  const p = prog(lv.id);
+  $('lvStars').innerHTML = lv.stars.map((t, i) => `<span class="chip">${'★'.repeat(i + 1)} ${t}+</span>`).join('') +
+    (p.best !== undefined ? `<span class="chip">your best: <b>${p.best}</b></span>` : '') +
+    (p.attempts ? `<span class="chip">attempts: ${p.attempts}</span>` : '');
+  // workshop
+  const tb = $('terms'); tb.innerHTML = '';
+  for (const t of lv.terms) {
+    const tr = document.createElement('tr'); tr.className = 'off'; tr.dataset.term = t.name;
+    tr.innerHTML = `<td><label class="switch"><input type="checkbox"><span></span></label></td>
+      <td class="nm"><span class="sign ${t.sign > 0 ? 'p' : 'm'}">${t.sign > 0 ? '+' : '−'}</span>${t.name.replace(/_/g, ' ')}${t.new ? '<span class="new">new</span>' : ''}</td>
+      <td><input type="range" min="-3" max="3" step="0.01"></td>
+      <td><input type="number" step="any" min="0"></td>
+      <td class="help">${t.help} <span title="value used by the balanced preset">(suggested ${t.suggested})</span></td>`;
+    const cb = tr.querySelector('input[type=checkbox]'), rg = tr.querySelector('input[type=range]'), nb = tr.querySelector('input[type=number]');
+    const setW = w => { nb.value = +(+w).toPrecision(3); rg.value = Math.log10(Math.max(+w, 0.001)); };
+    setW(t.suggested);
+    rg.oninput = () => { nb.value = +Math.pow(10, +rg.value).toPrecision(2); };
+    nb.oninput = () => { rg.value = Math.log10(Math.max(+nb.value || 0.001, 0.001)); };
+    cb.onchange = () => tr.classList.toggle('off', !cb.checked);
+    tr.setW = setW; tr.cb = cb; tr.nb = nb;
+    tb.appendChild(tr);
+  }
+  $('minutes').value = lv.minutes; $('minutesLbl').textContent = lv.minutes;
+  $('loadBest').hidden = !p.best_weights;
+  if (p.last_weights) applyRecipe(p.last_weights);     // continue where you left off
+  const prevBest = prog(lv.id - 1).best_run;
+  $('initWrap').hidden = !(lv.id > 1 && prevBest);
+  $('results').hidden = true;
+}
+function applyRecipe(w) {
+  for (const tr of $('terms').querySelectorAll('tr')) {
+    const r = w[tr.dataset.term];
+    tr.cb.checked = !!(r && r[0]); tr.classList.toggle('off', !tr.cb.checked);
+    if (r) tr.setW(r[1]);
+  }
+}
+$('loadBest').onclick = () => applyRecipe(prog(SEL).best_weights || {});
+$('minutes').oninput = e => $('minutesLbl').textContent = e.target.value;
+
+async function selectLevel(id) {
+  if (STATE && (STATE.phase === 'training' || STATE.phase === 'testing')) return;
+  SEL = id; renderLevels(); renderLevel();
+  await post('/api/view', {level:id});
+}
+
+$('train').onclick = async () => {
+  const terms = {};
+  let any = false;
+  for (const tr of $('terms').querySelectorAll('tr')) {
+    terms[tr.dataset.term] = {enabled: tr.cb.checked, weight: +tr.nb.value || 0};
+    if (tr.cb.checked && +tr.nb.value > 0) any = true;
+  }
+  if (!any) { $('msg').textContent = 'Switch on at least one reward term - otherwise the car learns nothing.'; return; }
+  $('msg').textContent = '';
+  const r = await post('/api/train', {level:SEL, terms, minutes:+$('minutes').value, init_prev:$('initPrev').checked});
+  if (r.status !== 'ok') $('msg').textContent = r.status;
+};
+$('stop').onclick = () => post('/api/stop');
+$('next').onclick = () => fetch('/control?cmd=next');
+$('speed').onchange = e => fetch('/control?cmd=speed&v=' + e.target.value);
+
+function drawChart(curve, minutes) {
+  const svg = $('chart'); const W = 400, H = 110;
+  const T = Math.max(minutes * 60, 1);
+  let g = `<line x1="0" y1="${H - 1}" x2="${W}" y2="${H - 1}" stroke="#2a2f3a"/>`;
+  for (const y of [0.25, 0.5, 0.75]) g += `<line x1="0" y1="${H - y * H}" x2="${W}" y2="${H - y * H}" stroke="#20242c"/>`;
+  if (curve.length > 1) {
+    const pts = curve.map(([t, v]) => `${(t / T * W).toFixed(1)},${(H - v * (H - 4) - 2).toFixed(1)}`).join(' ');
+    g += `<polyline points="${pts}" fill="none" stroke="#4aa3ff" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+    const last = curve[curve.length - 1];
+    g += `<text x="${Math.min(last[0] / T * W + 4, W - 34)}" y="${H - last[1] * (H - 4) - 6}" fill="#e8eaee" font-size="11">${Math.round(last[1] * 100)}%</text>`;
+  }
+  svg.innerHTML = g;
+}
+
+function renderState() {
+  const s = STATE;
+  const busy = s.phase === 'training' || s.phase === 'testing';
+  $('train').disabled = busy;
+  for (const el of $('workshop').querySelectorAll('input,button')) if (el.id !== 'train') el.disabled = busy;
+  $('trainBox').hidden = !busy;
+  $('viewSub').textContent = s.viewer || '';
+  if (s.phase === 'training') {
+    $('viewTitle').textContent = 'Training - live';
+    $('phaseLbl').textContent = 'Training';
+    $('stageLbl').textContent = s.stage ? 'practising: ' + s.stage : '';
+    const frac = Math.min(s.elapsed / (s.minutes * 60), 1);
+    $('timebar').style.width = (frac * 100) + '%';
+    $('timeLbl').textContent = `${(s.elapsed / 60).toFixed(1)} / ${s.minutes} min   ·   ${s.steps.toLocaleString()} practice steps`;
+    drawChart(s.curve, s.minutes);
+    $('log').textContent = s.log.join('\n');
+  } else if (s.phase === 'testing') {
+    $('viewTitle').textContent = 'Hidden test';
+    $('phaseLbl').textContent = `Testing on new roads: ${s.test[0]} / ${s.test[1]}`;
+    $('stageLbl').textContent = '';
+    $('timebar').style.width = (s.test[1] ? s.test[0] / s.test[1] * 100 : 0) + '%';
+    $('timeLbl').textContent = 'The live view shows your trained car on test-like roads.';
+  } else {
+    $('viewTitle').textContent = s.phase === 'done' ? 'Your trained car' : (prog(SEL).best_run ? 'Your best car' : 'Untrained car');
+  }
+  if (s.phase === 'done' && lastPhase !== 'done' && s.result) showResult(s.result);
+  if (lastPhase && lastPhase !== s.phase && s.phase === 'done') { loadLevels().then(() => { renderLevels(); }); }
+  lastPhase = s.phase;
+}
+
+function showResult(r) {
+  $('results').hidden = false;
+  if (r.error) { $('score').textContent = '—'; $('hints').innerHTML = `<div class="hint">${r.error}</div>`; return; }
+  $('score').textContent = Math.round(r.score);
+  $('resStars').textContent = starStr(r.stars);
+  $('newBest').hidden = !r.new_best;
+  $('drives').innerHTML = r.drives.map(d => {
+    const col = d.status === 'parked' ? 'var(--ok)' : (d.status === 'collision' || d.status === 'pedestrian_hit') ? 'var(--bad)' : 'var(--warn)';
+    return `<div title="${d.status} · ${d.score} pts · ${d.time}s · ${d.avg_speed_kmh} km/h" style="background:${col}; height:${Math.max(d.score / 10, 3)}%"></div>`;
+  }).join('');
+  $('hints').innerHTML = r.hints.map(h => `<div class="hint">${h}</div>`).join('');
+  renderHeader(); renderLevels(); $('results').hidden = false;
+  $('results').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+async function poll() {
+  try { STATE = await (await fetch('/api/state')).json(); renderState(); if (!document.querySelector('.lvl')) renderLevels(); }
+  catch (e) {}
+  setTimeout(poll, 1000);
+}
+
+// ---------------- sound (same files and logic as watch.py) ----------------
+let ac = null, buf = {}, engine = null, engGain = null, sqGain = null, lastBlink = false;
+const FILES = {engine:'engine_loop.ogg', brake:'brake_squeal.ogg', horn:'horn.ogg', crash1:'crash_metal.ogg',
+  crash2:'crash_glass.ogg', thud:'ped_hit.ogg', tick:'turn_tick.ogg', ping:'light_change.ogg',
+  chime:'park_chime.ogg', ambient:'ambient_city.ogg', wind:'wind_loop.ogg'};
+async function loadSnd(n) { try { const r = await fetch('/sounds/' + FILES[n]); buf[n] = await ac.decodeAudioData(await r.arrayBuffer()); } catch (e) {} }
+function loopSnd(n, g0) { if (!buf[n]) return [null, null]; const s = ac.createBufferSource(); s.buffer = buf[n]; s.loop = true;
+  const g = ac.createGain(); g.gain.value = g0; s.connect(g).connect(ac.destination); s.start(); return [s, g]; }
+function play(n, g0) { if (!ac || !buf[n]) return; const s = ac.createBufferSource(); s.buffer = buf[n];
+  const g = ac.createGain(); g.gain.value = g0; s.connect(g).connect(ac.destination); s.start(); }
+$('sound').onclick = async () => {
+  if (ac) { ac.close(); ac = null; $('sound').textContent = 'Sound on'; return; }
+  ac = new AudioContext(); await Promise.all(Object.keys(FILES).map(loadSnd));
+  [engine, engGain] = loopSnd('engine', 0.15); let sq; [sq, sqGain] = loopSnd('brake', 0); loopSnd('ambient', 0.1); loopSnd('wind', 0.06);
+  $('sound').textContent = 'Sound off';
+};
+const es = new EventSource('/events');
+es.onmessage = m => {
+  const d = JSON.parse(m.data);
+  if (d.type !== 'state' || !ac || !engine) return;
+  engine.playbackRate.value = 0.55 + d.speed / 20 + 0.12 * d.throttle;
+  engGain.gain.value = 0.16 + 0.10 * d.throttle + 0.04 * d.speed / 20;
+  if (sqGain) sqGain.gain.value = 0.35 * Math.max(0, (d.brake - 0.45) / 0.55) * Math.min(1, Math.max(0, (d.speed - 3) / 5));
+  if (d.blink !== lastBlink) play('tick', 0.25); lastBlink = d.blink;
+  for (const e of d.events) {
+    const att = 1 / (1 + Math.max(e.dist, 0) / 15);
+    if (e.name === 'crash') { play('crash1', 0.9); play('crash2', 0.6); }
+    else if (e.name === 'ped_hit') play('thud', 0.9);
+    else if (e.name === 'horn') play('horn', 0.7 * att);
+    else if (e.name === 'light_change') play('ping', 0.35);
+    else if (e.name === 'chime') play('chime', 0.6);
+  }
+};
+
+(async () => {
+  await loadLevels();
+  STATE = await (await fetch('/api/state')).json();
+  SEL = STATE.level;
+  renderLevels(); renderLevel(); renderState();
+  if (STATE.result && STATE.phase === 'done') showResult(STATE.result);
+  poll();
+})();
+</script>
+</body></html>

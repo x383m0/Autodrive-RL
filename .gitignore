@@ -19,3 +19,6 @@ scratch/
 # Finished runs worth keeping are added explicitly with `git add -f`, e.g.
 #   git add -f experiments/balanced/{model.zip,vecnormalize.pkl,*.csv,*.yaml,*.json} experiments/balanced/plots
 experiments/
+
+# game progress (local)
+games/

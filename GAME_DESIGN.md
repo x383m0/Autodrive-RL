@@ -27,12 +27,16 @@ zones. Going fast is the point; the challenge is going fast without crashing.
 
 ## Scoring (per test drive, averaged over the hidden test roads)
 
-- **Parked:** the main points. Level 1: by precision; levels 2+: by time
-  (faster = more points); levels 5+: minus penalties for running red lights,
-  rolling stop signs, crosswalk violations and speeding in school zones.
-- **Not parked** (crash, lost, stuck): a small number of points for the
-  distance driven ("way less than parking").
-- Stars (1-3) for passing score thresholds; 1 star unlocks the next level.
+| Part | Points |
+|---|---|
+| Distance driven along the route | up to 400 |
+| Parked in the spot | 400 |
+| Quality, when parked: precision (level 1) or speed (levels 2+) | up to 200 |
+| Rules (levels 5+): red light / rolled stop sign / crosswalk violation | -40 each |
+| Rules (levels 5+): speeding in a school zone | -10 per km/h over |
+
+Driving the whole way is worth about as much as parking itself. Stars (1-3)
+for passing score thresholds; 1 star unlocks the next level.
 
 ## Training
 

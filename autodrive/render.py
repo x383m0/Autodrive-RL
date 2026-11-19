@@ -195,6 +195,8 @@ class Renderer:
 
     def _build_static(self, env):
         city = env.city
+        if getattr(city, "kind", "city") == "road":
+            return self._build_static_road(env)
         Wm = city.width + 2 * MARGIN
         Hm = city.height + 2 * MARGIN
         S = pygame.Surface((int(Wm * PPM), int(Hm * PPM)))
@@ -337,6 +339,60 @@ class Renderer:
                 d = city.edge_dir(a, b)
                 pos = city.nodes[a] + d * (STOPLINE_D + 6) + right_of(d) * (ROAD_HW + 1.2)
                 self._limit_sign(S, pos, city.edge_limit(a, b) * 3.6, city.is_school(a, b))
+        return S
+
+    def _build_static_road(self, env):
+        """Static layer for the single-road world (game levels 2-3)."""
+        from .worlds import ROAD_HALF
+        city = env.city
+        Wm, Hm = city.width + 2 * MARGIN, city.height + 2 * MARGIN
+        S = pygame.Surface((int(Wm * PPM), int(Hm * PPM)))
+        rng = np.random.default_rng(int(city.width * 7))
+        S.fill(C["grass"])
+        for _ in range(int(Wm * Hm / 6)):
+            pygame.draw.circle(S, C["grass2"], (int(rng.uniform(0, Wm * PPM)), int(rng.uniform(0, Hm * PPM))),
+                               int(rng.integers(2, 6)))
+        ps = self.w2s_static
+        c = city.center
+        tang = np.gradient(c, axis=0)
+        tang /= np.linalg.norm(tang, axis=1, keepdims=True)
+        nrm = np.stack([-tang[:, 1], tang[:, 0]], 1)
+
+        def strip(off0, off1, color, step=4):
+            for i in range(0, len(c) - step, step):
+                j = i + step
+                quad = [c[i] + nrm[i] * off0, c[j] + nrm[j] * off0, c[j] + nrm[j] * off1, c[i] + nrm[i] * off1]
+                pygame.draw.polygon(S, color, [ps(q) for q in quad])
+        strip(-ROAD_HALF - 0.6, ROAD_HALF + 0.6, C["curb"])          # gravel shoulder
+        for rect in city.lot_polys():                                 # parking pad
+            pygame.draw.polygon(S, C["lot"], [ps(q) for q in obb_corners(rect)])
+        strip(-ROAD_HALF, ROAD_HALF, C["asphalt"])
+        # markings: solid white edges, dashed yellow centre line
+        for off in (-ROAD_HALF + 0.3, ROAD_HALF - 0.3):
+            pygame.draw.lines(S, (220, 220, 214), False, [ps(q) for q in c[::4] + nrm[::4] * off], 2)
+        for i in range(0, len(c) - 6, 12):
+            pygame.draw.line(S, C["yellow"], ps(c[i]), ps(c[i + 6]), 2)
+        # bays
+        for sl in city.slots:
+            ax = sl["axis"]
+            w = np.array([-ax[1], ax[0]])
+            for e in (-1, 1):
+                pygame.draw.line(S, C["line"], ps(sl["center"] + w * e * SLOT_W / 2 - ax * SLOT_D / 2),
+                                 ps(sl["center"] + w * e * SLOT_W / 2 + ax * SLOT_D / 2), 2)
+        for i, pb in enumerate(city.lot_parked_boxes()):
+            k = (i * 7) % len(self.npc_src)
+            self._blit_car(S, (pb[0], pb[1]), pb[4], self.npc_src[k], ("p", k), static=True, length=pb[2] * 2)
+        for (x, y, sz) in city.trees:
+            if not self.tree_src:
+                continue
+            src = self.tree_src[0 if sz > 0.9 else 1]
+            size = int(6.5 * sz * PPM)
+            img = pygame.transform.smoothscale(src, (size, size))
+            sh = pygame.Surface((size, size), pygame.SRCALPHA)
+            pygame.draw.ellipse(sh, (0, 0, 0, 60), (0, 0, size, size))
+            px, py = ps((x, y))
+            S.blit(sh, (px - size // 2 + 6, py - size // 2 + 8))
+            S.blit(img, (px - size // 2, py - size // 2))
         return S
 
     def _road_text(self, S, text, pos, direction, color):
@@ -751,9 +807,14 @@ class Renderer:
         self._text("km/h", (34, 84), "small", C["hud_dim"])
         # limit sign
         cx, cy = 210, 58
-        pygame.draw.circle(self.screen, (250, 250, 248), (cx, cy), 30)
-        pygame.draw.circle(self.screen, (210, 40, 40), (cx, cy), 30, 5)
-        self._text(f"{limit:.0f}", (cx, cy), "medb", (20, 20, 20), anchor="center")
+        if limit <= 60:
+            pygame.draw.circle(self.screen, (250, 250, 248), (cx, cy), 30)
+            pygame.draw.circle(self.screen, (210, 40, 40), (cx, cy), 30, 5)
+            self._text(f"{limit:.0f}", (cx, cy), "medb", (20, 20, 20), anchor="center")
+        else:                                   # game levels: no speed limit here
+            pygame.draw.circle(self.screen, (250, 250, 248), (cx, cy), 30)
+            pygame.draw.line(self.screen, (40, 40, 40), (cx - 19, cy + 19), (cx + 19, cy - 19), 4)
+            self._text("NO LIMIT", (cx, cy + 40), "title", C["hud_dim"], anchor="center")
         school = env.route.school[min(env.route_idx, len(env.route.school) - 1)]
         if school:
             self._text("SCHOOL ZONE", (cx, cy + 40), "title", C["yellow"], anchor="center")
@@ -782,8 +843,7 @@ class Renderer:
         self._text("ACCEL", (30, 164), "title", C["hud_dim"])
         self._bar(92, 168, 150, 10, acc, C["pos"] if acc >= 0 else C["neg"], centered=True)
         stg = env.ep_stage
-        from .curriculum import STAGES
-        self._text(f"{STAGES[stg]['name']}   t={env.t:5.1f}s", (30, 186), "tiny", C["hud_dim"])
+        self._text(f"{env.stages[stg]['name']}   t={env.t:5.1f}s", (30, 186), "tiny", C["hud_dim"])
 
         # ---------- right: reward breakdown ----------
         enabled = [k for k in TERMS if env.reward_cfg["terms"][k]["enabled"]

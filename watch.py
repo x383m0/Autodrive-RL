@@ -51,7 +51,10 @@ SOUNDS = ROOT / "assets" / "sounds"
 # Simulation thread
 # =====================================================================
 class Spectator:
-    def __init__(self, exp: Path, stage: int | None, follow: bool, quality: int, seed: int, fps: int = 30):
+    def __init__(self, exp: Path, stage: int | None, follow: bool, quality: int, seed: int, fps: int = 30,
+                 stages=None, allow_untrained=False):
+        """stages: list of world settings to drive in (default: the main curriculum).
+        allow_untrained: if no model exists yet, drive an untrained car (game mode)."""
         import torch
         torch.set_num_threads(1)
         from autodrive.curriculum import EVAL_STAGE, STAGES
@@ -62,12 +65,16 @@ class Spectator:
         self.follow = follow
         self.quality = quality
         self.fps = int(np.clip(fps, 10, 60))
-        self.stages = STAGES
-        self.stage = EVAL_STAGE if stage is None else stage
+        self.stages = stages if stages is not None else STAGES
+        self.stage = (len(self.stages) - 1 if stages is not None else EVAL_STAGE) if stage is None else stage
+        self.allow_untrained = allow_untrained
         self.policy_mtime = None
         self.policy_src = None
+        self.reward_cfg = None
+        self.stopped = False
         self._load_policy(force=True)
-        self.env = AutoDriveEnv(reward_config=self.reward_cfg, stage=self.stage, replay_prob=0.0)
+        self.env = AutoDriveEnv(reward_config=self.reward_cfg, stage=self.stage, replay_prob=0.0,
+                                stages=self.stages)
         self.env.renderer = Renderer()
         self.rng = np.random.default_rng(seed)
 
@@ -101,6 +108,12 @@ class Spectator:
         from autodrive.video import load_policy
         found = self._policy_dir()
         if found is None:
+            if force and self.allow_untrained:
+                # nothing trained yet: an untrained car just wobbles along
+                rng = np.random.default_rng(0)
+                self.policy = lambda obs: np.array([rng.normal(0, 0.3), rng.normal(-0.2, 0.4)])
+                self.policy_src = "untrained car (waiting for the first checkpoint)"
+                return False
             if force:
                 sys.exit(f"No model.zip + vecnormalize.pkl in {self.exp}"
                          f"{' or its checkpoints/' if self.follow else ''}. Train first.")
@@ -169,11 +182,19 @@ class Spectator:
         last_check = time.time()
         render_ms = 10.0                     # running estimate of draw + encode time
         hold_until = None
-        while True:
-            if self.follow and time.time() - last_check > 5:
+        while not self.stopped:
+            if self.follow and time.time() - last_check > 3:
                 last_check = time.time()
                 if self._load_policy():
                     self._push({"type": "model", "model": self.policy_src})
+                    # show the curriculum stage the trainer is currently practising
+                    try:
+                        k = int(json.load(open(self.exp / "curriculum.json"))["stage"])
+                        if k != self.stage and 0 <= k < len(self.stages):
+                            self.stage = k
+                            self.request_new = True
+                    except Exception:
+                        pass
             if self.request_new:
                 self.request_new = False
                 hold_until = None

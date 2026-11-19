@@ -54,6 +54,10 @@ def parse():
     ap.add_argument("--quick", action="store_true", help="2-minute smoke test, tiny eval")
     ap.add_argument("--resume", action="store_true", help="continue from experiments/<name>/checkpoints")
     ap.add_argument("--start-stage", type=int, default=0)
+    ap.add_argument("--ckpt-every", type=int, default=250_000,
+                    help="save a checkpoint every N steps (the live viewer picks them up)")
+    ap.add_argument("--level", type=int, default=None,
+                    help="train for a game level (uses that level's curriculum, see autodrive/levels.py)")
     ap.add_argument("--max-stage", type=int, default=None,
                     help="never advance the curriculum beyond this stage (used by game levels)")
     ap.add_argument("--init-from", default=None,
@@ -66,10 +70,17 @@ def parse():
     return ap.parse_args()
 
 
-def make_env_fn(reward_cfg, stage, rank, seed):
+def make_env_fn(reward_cfg, stage, rank, seed, level=None):
     def _f():
+        import signal
+        signal.signal(signal.SIGINT, signal.SIG_IGN)     # Ctrl+C is handled by the main process
         from autodrive.env import AutoDriveEnv
-        env = AutoDriveEnv(reward_config=reward_cfg, stage=stage, seed_range=(0, 10_000_000))
+        stages = None
+        if level is not None:
+            from autodrive.levels import BY_ID
+            stages = BY_ID[level]["curriculum"]
+        env = AutoDriveEnv(reward_config=reward_cfg, stage=stage, seed_range=(0, 10_000_000),
+                           stages=stages)
         env.reset(seed=seed * 1000 + rank)
         return env
     return _f
@@ -98,7 +109,13 @@ def main():
             obs, rew, done, info = self.venv.step_wait()
             return obs, rew * self.scale, done, info
 
-    from autodrive.curriculum import STAGES, CurriculumTracker
+    from autodrive.curriculum import STAGES as MAIN_STAGES
+    from autodrive.curriculum import CurriculumTracker
+    if args.level is not None:
+        from autodrive.levels import BY_ID
+        STAGES = BY_ID[args.level]["curriculum"]
+    else:
+        STAGES = MAIN_STAGES
     from autodrive.rewards import TERMS, RewardConfigError, describe_config, load_reward_config
 
     if args.quick:
@@ -143,7 +160,7 @@ def main():
                         "train_args": vars(args)}, f, sort_keys=False)
 
     # ---- curriculum state ----------------------------------------------------
-    tracker = CurriculumTracker(start_stage=args.start_stage, max_stage=args.max_stage)
+    tracker = CurriculumTracker(start_stage=args.start_stage, max_stage=args.max_stage, stages=STAGES)
     t_offset = 0
     cur_file = out / "curriculum.json"
     if args.resume and cur_file.exists():
@@ -154,7 +171,8 @@ def main():
         print(f"[resume] curriculum stage {tracker.stage} ({STAGES[tracker.stage]['name']}), "
               f"{t_offset} steps done")
 
-    venv = SubprocVecEnv([make_env_fn(reward_cfg, tracker.stage, i, args.seed + int(time.time()) % 1000 * args.resume)
+    venv = SubprocVecEnv([make_env_fn(reward_cfg, tracker.stage, i, args.seed + int(time.time()) % 1000 * args.resume,
+                                      args.level)
                           for i in range(args.n_envs)])
     init = Path(args.init_from) if args.init_from else None
     if init is not None and not (init / "model.zip").exists():
@@ -205,6 +223,17 @@ def main():
 
     t_start = time.time()
     budget = args.minutes * 60.0
+    # Ctrl+C / "Stop" in the game: finish the current update, then save normally
+    import signal
+    stop_requested = {"flag": False}
+
+    def _stop(signum, frame):
+        if stop_requested["flag"]:
+            raise KeyboardInterrupt
+        stop_requested["flag"] = True
+        print("\n[train] stop requested - saving the car ...", flush=True)
+    signal.signal(signal.SIGINT, _stop)
+    signal.signal(signal.SIGTERM, _stop)
 
     class Cb(BaseCallback):
         def __init__(self):
@@ -252,11 +281,13 @@ def main():
                     print(f"[train] exploration noise raised to >= {MIN_STD} for the new stage", flush=True)
                 print(f"\n=== CURRICULUM: advancing to stage {k}: {STAGES[k]['name']} at {ts} steps ===\n",
                       flush=True)
-            if ts - self.last_ckpt >= 250_000:
+            if ts - self.last_ckpt >= args.ckpt_every:
                 self.last_ckpt = ts
                 self.save_ckpt(ts)
             if time.time() - t_start > budget:
                 print("[train] time budget reached")
+                return False
+            if stop_requested["flag"]:
                 return False
             return True
 
