@@ -375,10 +375,11 @@ class Renderer:
         d, r, m = city.lot_d, city.lot_r, city.lot_m
         for i, sl in enumerate(city.slots):
             c = sl["center"]
-            side = sl["side"]
+            ax = sl["axis"]                       # slot axis (angled)
+            w = np.array([-ax[1], ax[0]])         # across the slot
             for e in (-1, 1):
-                p0 = c + r * e * SLOT_W / 2 - d * side * SLOT_D / 2
-                p1 = c + r * e * SLOT_W / 2 + d * side * SLOT_D / 2
+                p0 = c + w * e * SLOT_W / 2 - ax * SLOT_D / 2
+                p1 = c + w * e * SLOT_W / 2 + ax * SLOT_D / 2
                 pygame.draw.line(S, C["line"], ps(p0), ps(p1), 2)
         # entrance arrow-ish marking
         a0, a1 = city.lot_aisle
