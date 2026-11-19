@@ -36,7 +36,7 @@ import numpy as np
 import yaml
 
 ROOT = Path(__file__).resolve().parent
-MIN_STD = 0.25          # action noise restored at every curriculum stage advance
+MIN_STD = 0.2           # action noise restored when entering a stage with new actors
 sys.path.insert(0, str(ROOT))
 
 
@@ -131,7 +131,7 @@ def main():
         model = PPO(
             "MlpPolicy", venv, device="cpu", seed=args.seed,
             n_steps=512, batch_size=512, n_epochs=6, learning_rate=3e-4,
-            gamma=0.99, gae_lambda=0.95, clip_range=0.2, ent_coef=0.005,
+            gamma=0.99, gae_lambda=0.95, clip_range=0.2, ent_coef=0.002,
             vf_coef=0.5, max_grad_norm=0.5,
             policy_kwargs=dict(net_arch=dict(pi=[256, 256], vf=[256, 256]), log_std_init=-1.0),
             verbose=0)
@@ -187,9 +187,14 @@ def main():
                 # shrinks towards zero (we measured 0.05), and a nearly
                 # deterministic policy cannot discover the new skills a harder
                 # stage needs (it got WORSE in the traffic stage). So each new
-                # stage starts with at least MIN_STD of exploration noise.
-                with torch.no_grad():
-                    self.model.policy.log_std.clamp_(min=float(np.log(MIN_STD)))
+                # stage with NEW ACTORS (traffic, pedestrians) starts with at least
+                # MIN_STD of exploration noise. Not for the parking/rules stages:
+                # precise parking needs LOW noise, and those pass quickly anyway.
+                if STAGES[k]["n_cars"] > STAGES[k - 1]["n_cars"] or STAGES[k]["n_peds"] > STAGES[k - 1]["n_peds"] \
+                        or k == len(STAGES) - 1:
+                    with torch.no_grad():
+                        self.model.policy.log_std.clamp_(min=float(np.log(MIN_STD)))
+                    print(f"[train] exploration noise raised to >= {MIN_STD} for the new stage", flush=True)
                 print(f"\n=== CURRICULUM: advancing to stage {k}: {STAGES[k]['name']} at {ts} steps ===\n",
                       flush=True)
             if ts - self.last_ckpt >= 250_000:
