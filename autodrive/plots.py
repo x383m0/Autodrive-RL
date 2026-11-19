@@ -92,7 +92,8 @@ def training_plots(exp_dir):
         print("[plots] not enough episodes yet")
         return
     steps = np.array([float(e["timesteps"]) for e in eps])
-    stages = [int(e["stage"]) for e in eps]
+    # curriculum stage = running maximum (replayed easier episodes don't count)
+    stages = list(np.maximum.accumulate([int(e["stage"]) for e in eps]))
     succ = np.array([e["success"] == "True" for e in eps], float)
     ret = np.array([float(e["return"]) for e in eps])
     coll = np.array([e["status"] == "collision" for e in eps], float)
