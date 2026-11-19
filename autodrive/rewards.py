@@ -77,30 +77,91 @@ DEFAULT_TERMS = {
 }
 
 
+class RewardConfigError(ValueError):
+    """A problem in a reward YAML file, explained in plain English."""
+
+
 def load_reward_config(path=None) -> dict:
-    """Load a YAML reward config and fill in anything missing with defaults."""
+    """Load a YAML reward config.
+
+    ONLY the terms written in your file count. Any term you leave out is
+    switched OFF - nothing sneaks in behind your back. (Settings you leave
+    out use the defaults in DEFAULT_SETTINGS.)
+
+    With path=None you get the built-in "balanced" defaults (used by tests).
+    """
     cfg = {"terms": copy.deepcopy(DEFAULT_TERMS), "settings": dict(DEFAULT_SETTINGS),
            "name": "defaults"}
     if path is not None:
-        with open(path) as f:
-            user = yaml.safe_load(f) or {}
+        try:
+            with open(path) as f:
+                user = yaml.safe_load(f) or {}
+        except FileNotFoundError:
+            raise RewardConfigError(f"Reward file not found: {path}") from None
+        except yaml.YAMLError as e:
+            raise RewardConfigError(
+                f"Could not read {path} - the layout is off somewhere.\n"
+                f"Most common causes: a TAB instead of spaces, or lines not lined up "
+                f"(term names start with 2 spaces, 'enabled'/'weight' with 4).\n"
+                f"Details: {e}") from None
+        if not isinstance(user, dict):
+            raise RewardConfigError(f"{path} should start with 'terms:' - see rewards/template.yaml")
         cfg["name"] = user.get("name", Path(path).stem)
         cfg["description"] = user.get("description", "")
+        # start with every term OFF, then switch on what the file lists
+        for t in cfg["terms"].values():
+            t["enabled"] = False
         for k, v in (user.get("terms") or {}).items():
             if k not in TERMS:
-                raise ValueError(f"Unknown reward term '{k}' in {path}. Known: {list(TERMS)}")
-            cfg["terms"][k].update(v or {})
+                close = [t for t in TERMS if t[:4] == str(k)[:4]]
+                hint = f" Did you mean '{close[0]}'?" if close else ""
+                raise RewardConfigError(
+                    f"Unknown reward term '{k}' in {path}.{hint}\nValid names: {', '.join(TERMS)}")
+            if v is None:
+                v = {}
+            if not isinstance(v, dict):
+                raise RewardConfigError(
+                    f"Term '{k}' in {path} should have 'enabled:' and 'weight:' lines under it, "
+                    f"indented by 4 spaces.")
+            for key in v:
+                if key not in ("enabled", "weight"):
+                    raise RewardConfigError(
+                        f"Term '{k}' has an unknown line '{key}'. Only 'enabled' and 'weight' are allowed.")
+            cfg["terms"][k]["enabled"] = v.get("enabled", True)   # listed = on unless you say false
+            if "weight" in v:
+                cfg["terms"][k]["weight"] = v["weight"]
         for k, v in (user.get("settings") or {}).items():
             if k not in DEFAULT_SETTINGS:
-                raise ValueError(f"Unknown setting '{k}' in {path}. Known: {list(DEFAULT_SETTINGS)}")
+                raise RewardConfigError(
+                    f"Unknown setting '{k}' in {path}.\nValid settings: {', '.join(DEFAULT_SETTINGS)}")
             cfg["settings"][k] = v
     for k, t in cfg["terms"].items():
-        t["weight"] = float(t.get("weight", 0.0))
-        t["enabled"] = bool(t.get("enabled", True))
+        if not isinstance(t["enabled"], bool):
+            raise RewardConfigError(f"'enabled' for '{k}' must be true or false, got {t['enabled']!r}")
+        try:
+            t["weight"] = float(t.get("weight", 0.0))
+        except (TypeError, ValueError):
+            raise RewardConfigError(f"'weight' for '{k}' must be a number, got {t['weight']!r}") from None
         if t["weight"] < 0:
-            raise ValueError(f"Weight of '{k}' is negative. Use positive weights; the sign is "
-                             f"fixed per term (see TERMS in autodrive/rewards.py).")
+            raise RewardConfigError(
+                f"Weight of '{k}' is negative. Always use positive weights: whether a term is a "
+                f"bonus or a penalty is fixed (see the [+]/[-] tags in rewards/template.yaml).")
+    if path is not None and not any(t["enabled"] and t["weight"] > 0 for t in cfg["terms"].values()):
+        raise RewardConfigError(
+            f"No reward terms are switched on in {path}, so the car would learn nothing. "
+            f"Set at least one term to 'enabled: true' with a weight above 0.")
     return cfg
+
+
+def describe_config(cfg) -> str:
+    """One line per switched-on term, printed at the start of training."""
+    lines = []
+    for k, (sign, _kind, desc) in TERMS.items():
+        t = cfg["terms"][k]
+        if t["enabled"] and t["weight"] > 0:
+            lines.append(f"  {'+' if sign > 0 else '-'} {k:22s} weight {t['weight']:<8g} {desc}")
+    off = [k for k in TERMS if not (cfg["terms"][k]["enabled"] and cfg["terms"][k]["weight"] > 0)]
+    return "\n".join(lines) + (f"\n  (off: {', '.join(off)})" if off else "")
 
 
 class RewardComputer:

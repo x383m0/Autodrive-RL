@@ -73,7 +73,7 @@ def main():
     from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize
 
     from autodrive.curriculum import STAGES, CurriculumTracker
-    from autodrive.rewards import TERMS, load_reward_config
+    from autodrive.rewards import TERMS, RewardConfigError, describe_config, load_reward_config
 
     if args.quick:
         args.minutes = min(args.minutes, 2.0)
@@ -93,7 +93,12 @@ def main():
     else:
         reward_path = out / "reward_config.yaml"
         shutil.copy(args.reward, reward_path)
-    reward_cfg = load_reward_config(reward_path)
+    try:
+        reward_cfg = load_reward_config(reward_path)
+    except RewardConfigError as e:
+        print(f"\n[reward config problem] {e}\n")
+        sys.exit(1)
+    print(f"[train] rewards switched on in '{reward_cfg['name']}':\n{describe_config(reward_cfg)}")
     with open(out / "config.yaml", "w") as f:
         yaml.safe_dump({"reward_file": str(args.reward), "reward": reward_cfg,
                         "train_args": vars(args)}, f, sort_keys=False)
