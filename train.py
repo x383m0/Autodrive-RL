@@ -36,6 +36,9 @@ import numpy as np
 import yaml
 
 ROOT = Path(__file__).resolve().parent
+REWARD_SCALE = 0.1      # fixed reward scaling (instead of running normalisation)
+LEARNING_RATE = 2e-4
+TARGET_KL = 0.02        # stop an update early if the policy changes too much at once
 MIN_STD = 0.2           # action noise restored when entering a stage with new actors
 sys.path.insert(0, str(ROOT))
 
@@ -73,7 +76,22 @@ def main():
     torch.set_num_threads(2)
     from stable_baselines3 import PPO
     from stable_baselines3.common.callbacks import BaseCallback
-    from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize
+    from stable_baselines3.common.vec_env import SubprocVecEnv, VecEnvWrapper, VecNormalize
+
+    class ScaleReward(VecEnvWrapper):
+        """Multiply rewards by a FIXED factor. (SB3's running reward
+        normalisation drifted every time the curriculum changed stage, which
+        silently re-scaled everything the critic had learned.)"""
+        def __init__(self, venv, scale):
+            super().__init__(venv)
+            self.scale = scale
+
+        def reset(self):
+            return self.venv.reset()
+
+        def step_wait(self):
+            obs, rew, done, info = self.venv.step_wait()
+            return obs, rew * self.scale, done, info
 
     from autodrive.curriculum import STAGES, CurriculumTracker
     from autodrive.rewards import TERMS, RewardConfigError, describe_config, load_reward_config
@@ -134,10 +152,12 @@ def main():
     venv = SubprocVecEnv([make_env_fn(reward_cfg, tracker.stage, i, args.seed + int(time.time()) % 1000 * args.resume)
                           for i in range(args.n_envs)])
     if args.resume and (ckpt_dir / "vecnormalize.pkl").exists():
-        venv = VecNormalize.load(str(ckpt_dir / "vecnormalize.pkl"), venv)
+        venv = VecNormalize.load(str(ckpt_dir / "vecnormalize.pkl"), ScaleReward(venv, REWARD_SCALE))
+        venv.norm_reward = False
         venv.training = True
     else:
-        venv = VecNormalize(venv, norm_obs=True, norm_reward=True, clip_obs=10.0, gamma=0.99)
+        venv = VecNormalize(ScaleReward(venv, REWARD_SCALE), norm_obs=True, norm_reward=False,
+                            clip_obs=10.0, gamma=0.99)
 
     if args.resume and (ckpt_dir / "model.zip").exists():
         model = PPO.load(str(ckpt_dir / "model.zip"), env=venv, device="cpu")
@@ -145,7 +165,7 @@ def main():
     else:
         model = PPO(
             "MlpPolicy", venv, device="cpu", seed=args.seed,
-            n_steps=512, batch_size=512, n_epochs=6, learning_rate=3e-4,
+            n_steps=512, batch_size=512, n_epochs=6, learning_rate=LEARNING_RATE, target_kl=TARGET_KL,
             gamma=0.99, gae_lambda=0.95, clip_range=0.2, ent_coef=0.002,
             vf_coef=0.5, max_grad_norm=0.5,
             policy_kwargs=dict(net_arch=dict(pi=[256, 256], vf=[256, 256]), log_std_init=-1.0),
