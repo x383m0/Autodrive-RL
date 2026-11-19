@@ -1,0 +1,11 @@
+# CPU-only stack. Install torch first if you want the small CPU wheel:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+gymnasium>=1.0
+stable-baselines3>=2.4
+torch>=2.4
+pygame>=2.6
+numpy>=1.26
+pyyaml>=6.0
+matplotlib>=3.8
+imageio>=2.34
+imageio-ffmpeg>=0.5
