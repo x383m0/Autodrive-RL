@@ -81,6 +81,19 @@ def main():
         args.video_episodes = 1
     name = args.name or Path(args.reward).stem
     out = ROOT / "experiments" / name
+    if not args.resume:
+        # check the reward file BEFORE creating anything, and name the user's file
+        try:
+            load_reward_config(args.reward)
+        except RewardConfigError as e:
+            msg = str(e)
+            if "No reward terms are switched on" in msg:
+                msg += ("\n\nTip: don't train the template itself. Copy it and switch terms on:\n"
+                        "    cp rewards/template.yaml rewards/mine.yaml\n"
+                        "    (edit rewards/mine.yaml: enabled: false -> true, weight: 0 -> a number)\n"
+                        "    python train.py --reward rewards/mine.yaml --name mine")
+            print(f"\n[reward config problem] {msg}\n")
+            sys.exit(1)
     ckpt_dir = out / "checkpoints"
     out.mkdir(parents=True, exist_ok=True)
     (out / "plots").mkdir(exist_ok=True)

@@ -19,7 +19,7 @@ CPU only.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt     # Python 3.10-3.14; on 3.14 this installs pygame-ce
 
 # 2-minute smoke test (checks that everything runs)
 python train.py --reward rewards.yaml --name smoke --quick
