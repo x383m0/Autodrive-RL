@@ -6,7 +6,28 @@ environments. Evaluation always uses cities the car has never seen (seeds
 from 50,000,000; training draws seeds below 10,000,000) and a deterministic
 policy.
 
-## Summary
+## Update: training stability fix (`experiments/stable`)
+
+`train.py` now uses a fixed reward scale instead of running reward
+normalisation, learning rate 2e-4 and PPO's `target_kl` 0.02. One 45-minute
+run (only ~1.9M steps: the CPU was shared with other work):
+
+- reached **S5 pedestrians** (every earlier run collapsed at traffic) and kept
+  36-66% success there without collapsing;
+- **full city, 100 unseen cities: 23% parked** (95% CI 16-32%), up from 5%
+  (CI 2-11%) for `balanced_45min`. Still 34% collisions and 30% pedestrian
+  hits, so it is far from a good driver - but traffic is now learnable.
+
+| Full city (100 unseen) | balanced_45min | stable |
+|---|---|---|
+| Parked | 5% | **23%** |
+| Collision | 54% | 34% |
+| Pedestrian hit | 37% | 30% |
+| Average route completed | 43% | 51% |
+
+`python watch.py --exp experiments/stable` to watch it.
+
+## Summary (original 45-minute runs)
 
 | | Honest verdict |
 |---|---|

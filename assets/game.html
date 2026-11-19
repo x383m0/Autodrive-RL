@@ -3,67 +3,106 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Reward Designer</title>
 <style>
-:root { --bg:#0e1014; --panel:#171a21; --panel2:#1d2129; --line:#2a2f3a; --fg:#e8eaee; --dim:#9aa1ad;
-        --ok:#5cc878; --bad:#e8584f; --warn:#f0a43c; --accent:#4aa3ff; --gold:#f5c542; }
+:root { --bg:#0e1014; --panel:#171a21; --panel2:#1d2129; --panel3:#232834; --line:#2a2f3a; --fg:#e8eaee;
+        --dim:#9aa1ad; --ok:#5cc878; --bad:#e8584f; --warn:#f0a43c; --accent:#4aa3ff; --gold:#f5c542; }
 * { box-sizing:border-box; }
 body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
 header { display:flex; align-items:center; gap:14px; padding:10px 18px; border-bottom:1px solid var(--line); }
 header h1 { font-size:17px; margin:0; letter-spacing:.06em; }
 header .total { margin-left:auto; color:var(--gold); font-weight:600; }
-button, select, input[type=number] { background:var(--panel2); color:var(--fg); border:1px solid var(--line);
-  border-radius:8px; padding:6px 10px; font:inherit; }
+button, select, input[type=number], input[type=text] { background:var(--panel2); color:var(--fg);
+  border:1px solid var(--line); border-radius:8px; padding:6px 10px; font:inherit; }
 button { cursor:pointer; } button:hover:not(:disabled) { border-color:var(--accent); }
 button:disabled { opacity:.45; cursor:default; }
 button.primary { background:var(--accent); border-color:var(--accent); color:#06121f; font-weight:700; padding:9px 18px; }
+button.add { border-style:dashed; border-color:var(--accent); color:var(--accent); font-weight:600; }
 button.danger { border-color:var(--bad); color:var(--bad); }
+button.ghost { background:none; border-color:transparent; color:var(--dim); padding:4px 8px; }
+button.ghost:hover { color:var(--fg); }
 .layout { display:grid; grid-template-columns:230px minmax(0,1fr); gap:16px; padding:16px; }
 @media (max-width: 1000px) { .layout { grid-template-columns:1fr; } }
 .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
 .levels { display:flex; flex-direction:column; gap:6px; align-self:start; }
 .lvl { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:9px; border:1px solid transparent; cursor:pointer; }
-.lvl:hover { background:var(--panel2); }
-.lvl.sel { border-color:var(--accent); background:var(--panel2); }
+.lvl:hover { background:var(--panel2); } .lvl.sel { border-color:var(--accent); background:var(--panel2); }
 .lvl.locked { opacity:.45; cursor:default; }
 .lvl .num { width:26px; height:26px; border-radius:50%; background:var(--panel2); display:grid; place-items:center; font-weight:700; font-size:12px; }
 .lvl .nm { flex:1; } .lvl .st { color:var(--gold); font-size:12px; letter-spacing:1px; }
 .soon { font-size:10px; color:var(--dim); border:1px solid var(--line); border-radius:6px; padding:0 5px; }
 .main { display:flex; flex-direction:column; gap:14px; min-width:0; }
-.title { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+.row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .title h2 { margin:0; font-size:22px; }
+h3 { font-size:16px; margin:0; }
 .dim { color:var(--dim); }
 .chips { display:flex; gap:6px; flex-wrap:wrap; }
 .chip { font-size:12px; padding:2px 8px; border-radius:7px; background:var(--panel2); border:1px solid var(--line); }
-.grid2 { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); gap:14px; }
-@media (max-width: 1250px) { .grid2 { grid-template-columns:1fr; } }
-table { width:100%; border-collapse:collapse; }
-td { padding:6px 4px; border-top:1px solid var(--line); vertical-align:middle; }
-td.nm { font-weight:600; white-space:nowrap; }
-td.help { color:var(--dim); font-size:12px; }
-.sign { display:inline-block; width:18px; text-align:center; font-weight:800; }
-.sign.p { color:var(--ok); } .sign.m { color:var(--bad); }
-.new { font-size:10px; color:#06121f; background:var(--gold); border-radius:5px; padding:0 4px; margin-left:4px; }
-input[type=range] { width:110px; accent-color:var(--accent); }
-input[type=number] { width:82px; }
-.switch { position:relative; width:34px; height:20px; display:inline-block; }
-.switch input { display:none; }
-.switch span { position:absolute; inset:0; background:#333a46; border-radius:20px; transition:.15s; cursor:pointer; }
-.switch span:before { content:""; position:absolute; width:14px; height:14px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.15s; }
-.switch input:checked + span { background:var(--accent); } .switch input:checked + span:before { transform:translateX(14px); }
-tr.off td:not(:first-child) { opacity:.45; }
-.trainbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:12px; }
+.work { display:grid; grid-template-columns:1fr; gap:14px; }
+.work.with-live { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+@media (max-width: 1250px) { .work.with-live { grid-template-columns:1fr; } }
+/* reward list */
+.rlist { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+.empty { border:1px dashed var(--line); border-radius:10px; padding:26px; text-align:center; color:var(--dim); }
+.ritem { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:12px; align-items:center;
+         background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+.ritem .nm { font-weight:700; }
+.ritem .help { color:var(--dim); font-size:12px; }
+.ritem.invalid { border-color:var(--bad); }
+.tag { font-size:11px; color:var(--dim); border:1px solid var(--line); border-radius:6px; padding:0 6px; margin-left:6px; font-weight:400; }
+.tag.custom { color:var(--gold); border-color:#5b4c1c; }
+.pts { display:flex; align-items:center; gap:6px; }
+.pts input { width:96px; text-align:right; }
+.trainbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; border-top:1px solid var(--line); padding-top:12px; }
+input[type=range] { accent-color:var(--accent); }
+/* live */
+#liveCard { position:relative; }
 #view { width:100%; border-radius:10px; border:1px solid var(--line); background:#000; display:block; }
 .viewctl { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center; }
 .bar { height:8px; background:var(--panel2); border-radius:6px; overflow:hidden; }
 .bar > div { height:100%; background:var(--accent); width:0; transition:width .3s; }
-svg.chart { width:100%; height:110px; display:block; }
+svg.chart { width:100%; height:100px; display:block; }
+.log { font:11px/1.4 ui-monospace, monospace; color:var(--dim); white-space:pre-wrap; max-height:80px; overflow:auto; }
+#liveCard:fullscreen { background:#000; padding:0; border:none; border-radius:0; display:flex; flex-direction:column; }
+#liveCard:fullscreen #view { flex:1; min-height:0; object-fit:contain; border:none; border-radius:0; }
+#liveCard:fullscreen .lhead { display:none; }
+#liveCard:fullscreen .viewctl { position:absolute; bottom:14px; left:50%; transform:translateX(-50%); margin:0;
+  background:rgba(16,18,24,.85); padding:8px 12px; border-radius:12px; border:1px solid var(--line); }
+#liveCard:fullscreen #trainBox { position:absolute; top:14px; left:50%; transform:translateX(-50%); width:min(520px, 90vw);
+  background:rgba(16,18,24,.85); padding:10px 14px; border-radius:12px; border:1px solid var(--line); margin:0; }
+#liveCard:fullscreen #trainBox .log, #liveCard:fullscreen #trainBox svg, #liveCard:fullscreen #trainBox .chartlbl { display:none; }
+#fsResult { display:none; }
+#liveCard:fullscreen #fsResult.show { display:block; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  width:min(560px, 92vw); background:rgba(16,18,24,.95); border:1px solid var(--line); border-radius:14px; padding:20px; }
+/* results */
 .big { font-size:42px; font-weight:800; }
 .stars { color:var(--gold); font-size:26px; letter-spacing:3px; }
 .drives { display:flex; gap:4px; align-items:flex-end; height:70px; margin:8px 0; }
 .drives div { flex:1; border-radius:4px 4px 0 0; min-height:3px; }
 .hint { padding:7px 10px; background:var(--panel2); border-left:3px solid var(--warn); border-radius:6px; margin:6px 0; }
-.log { font:11px/1.4 ui-monospace, monospace; color:var(--dim); white-space:pre-wrap; max-height:90px; overflow:auto; }
 .legend { display:flex; gap:12px; font-size:12px; color:var(--dim); flex-wrap:wrap; }
 .legend i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:4px; vertical-align:-1px; }
+/* modals */
+.modal { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:20; padding:16px; }
+.modal.open { display:flex; }
+.dialog { background:var(--panel); border:1px solid var(--line); border-radius:14px; width:min(820px, 100%); max-height:90vh;
+          overflow:auto; padding:18px; }
+.dialog .head { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.dialog .head button { margin-left:auto; }
+.pgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:8px; }
+.pcard { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px; cursor:pointer; }
+.pcard:hover { border-color:var(--accent); }
+.pcard.added { opacity:.45; cursor:default; }
+.pcard .nm { font-weight:700; } .pcard .help { font-size:12px; color:var(--dim); margin-top:4px; }
+.pcard .acts { display:flex; gap:6px; margin-top:6px; }
+.sect { font-size:12px; color:var(--dim); text-transform:uppercase; letter-spacing:.08em; margin:14px 0 6px; }
+.group { border:1px solid var(--line); border-radius:10px; padding:10px; background:var(--panel2); }
+.group .glabel { font-size:12px; color:var(--dim); margin-bottom:6px; display:flex; }
+.group .glabel button { margin-left:auto; }
+.cond { display:flex; gap:6px; align-items:center; margin:6px 0; flex-wrap:wrap; }
+.cond select { max-width:290px; }
+.cond input { width:90px; }
+.or { text-align:center; color:var(--accent); font-weight:700; margin:6px 0; }
+.err { color:var(--bad); margin-top:8px; white-space:pre-wrap; }
+.preview { width:100%; border-radius:10px; border:1px solid var(--line); }
 </style></head>
 <body>
 <header><h1>REWARD DESIGNER</h1><span class="dim">teach a self-driving car by designing what it is rewarded for</span>
@@ -72,228 +111,397 @@ svg.chart { width:100%; height:110px; display:block; }
   <nav class="card levels" id="levels"></nav>
   <div class="main">
     <section class="card">
-      <div class="title"><h2 id="lvTitle">-</h2><span class="dim" id="lvScore"></span></div>
+      <div class="row title"><h2 id="lvTitle">-</h2><span class="dim" id="lvScore"></span>
+        <button id="mapBtn" style="margin-left:auto">Map & rules</button></div>
       <p id="lvBrief" style="margin:8px 0 6px"></p>
       <div class="chips" id="lvStars"></div>
     </section>
-    <div class="grid2">
+    <div class="work" id="work">
       <section class="card" id="workshop">
-        <div class="title"><h2 style="font-size:16px">Reward workshop</h2>
-          <span class="dim">switch terms on and choose weights</span>
-          <button id="loadBest" style="margin-left:auto" hidden>Load my best recipe</button></div>
-        <table id="terms"></table>
+        <div class="row"><h3>Your reward</h3><span class="dim">what earns or costs the car points</span>
+          <span style="margin-left:auto"></span>
+          <button id="loadBest" hidden>Load my best recipe</button>
+          <button class="add" id="addBtn">+ Add reward</button></div>
+        <div class="rlist" id="rlist"></div>
         <div class="trainbar">
           <label>Training time <input type="range" id="minutes" min="1" max="45" step="1"> <b id="minutesLbl"></b> min</label>
           <label id="initWrap" hidden><input type="checkbox" id="initPrev"> start from my best car of the previous level</label>
           <button class="primary" id="train" style="margin-left:auto">Train</button>
         </div>
-        <div id="msg" class="dim" style="margin-top:6px"></div>
+        <div id="msg" class="err"></div>
       </section>
-      <section class="card">
-        <div class="title"><h2 style="font-size:16px" id="viewTitle">Live view</h2><span class="dim" id="viewSub"></span></div>
-        <img id="view" src="/stream.mjpg" alt="live view of the car">
+      <section class="card" id="liveCard" hidden>
+        <div class="row lhead"><h3 id="viewTitle">Live view</h3><span class="dim" id="viewSub"></span>
+          <button id="fsBtn" style="margin-left:auto" title="fullscreen">⛶ Fullscreen</button></div>
+        <img id="view" alt="live view of the car" style="margin-top:8px">
+        <div id="trainBox" hidden style="margin-top:12px">
+          <div class="row"><b id="phaseLbl">Training</b><span class="dim" id="stageLbl"></span>
+            <button class="danger" id="stop" style="margin-left:auto">Stop and test now</button></div>
+          <div class="bar" style="margin:8px 0"><div id="timebar"></div></div>
+          <div class="dim" id="timeLbl"></div>
+          <svg class="chart" id="chart" viewBox="0 0 400 100" preserveAspectRatio="none"></svg>
+          <div class="dim chartlbl" style="font-size:12px">Parked during training (% of the last 100 practice drives)</div>
+          <div class="log" id="log"></div>
+        </div>
         <div class="viewctl">
           <button id="sound">Sound on</button>
           <span class="dim">Speed</span>
           <select id="speed"><option value="0.5">0.5</option><option value="1" selected>1</option><option value="2">2</option><option value="4">4</option></select>
           <button id="next">Next road</button>
+          <button id="fsExit" class="ghost" hidden>Exit fullscreen</button>
         </div>
-        <div id="trainBox" hidden style="margin-top:12px">
-          <div class="title"><b id="phaseLbl">Training</b><span class="dim" id="stageLbl"></span>
-            <button class="danger" id="stop" style="margin-left:auto">Stop and test now</button></div>
-          <div class="bar" style="margin:8px 0"><div id="timebar"></div></div>
-          <div class="dim" id="timeLbl"></div>
-          <svg class="chart" id="chart" viewBox="0 0 400 110" preserveAspectRatio="none"></svg>
-          <div class="dim" style="font-size:12px">Parked during training (% of the last 100 practice drives)</div>
-          <div class="log" id="log"></div>
-        </div>
+        <div id="fsResult"></div>
       </section>
     </div>
-    <section class="card" id="results" hidden>
-      <div class="title"><h2 style="font-size:16px">Test results</h2><span class="dim">12 roads the car has never seen</span></div>
-      <div style="display:flex; gap:28px; align-items:center; flex-wrap:wrap">
-        <div><div class="big" id="score">-</div><div class="dim">points (average)</div></div>
-        <div class="stars" id="resStars"></div>
-        <div id="newBest" class="chip" hidden style="color:var(--gold)">New best!</div>
-      </div>
-      <div class="drives" id="drives"></div>
-      <div class="legend"><span><i style="background:var(--ok)"></i>parked</span><span><i style="background:var(--bad)"></i>crash</span>
-        <span><i style="background:var(--warn)"></i>lost / stuck / too slow</span><span>bar height = points</span></div>
-      <h3 style="font-size:14px; margin:14px 0 4px">Hints</h3>
-      <div id="hints"></div>
-    </section>
+    <section class="card" id="results" hidden></section>
   </div>
 </div>
+
+<!-- + Add reward -->
+<div class="modal" id="pickModal"><div class="dialog">
+  <div class="head"><h3>Add a reward</h3><button class="ghost" data-close>✕</button></div>
+  <div class="sect">Built-in rewards</div><div class="pgrid" id="pBuilt"></div>
+  <div class="sect">My custom rewards</div><div class="pgrid" id="pCustom"></div>
+  <div style="margin-top:12px"><button class="add" id="newCustom">+ Create custom reward…</button></div>
+</div></div>
+
+<!-- rule builder -->
+<div class="modal" id="builderModal"><div class="dialog">
+  <div class="head"><h3 id="bTitle">Custom reward</h3><button class="ghost" data-close>✕</button></div>
+  <label>Name <input type="text" id="bName" placeholder="e.g. slow near people" style="width:60%"></label>
+  <div class="sect">When</div>
+  <div class="dim" style="font-size:12px">The reward fires when ANY box is true; a box is true when ALL its conditions are true.
+    No conditions = always.</div>
+  <div id="bGroups" style="margin-top:8px"></div>
+  <button id="bAddGroup" style="margin-top:8px">+ OR box</button>
+  <div class="sect">Give</div>
+  <div class="row"><input type="number" step="any" id="bGive" placeholder="points" style="width:110px">
+    <span class="dim">points</span>
+    <select id="bTimes"><option value="">(fixed amount)</option></select></div>
+  <div class="sect">Paid</div>
+  <label><input type="radio" name="bPaid" value="every_step" checked> every step while it is true</label><br>
+  <label><input type="radio" name="bPaid" value="on_change"> each time it becomes true</label>
+  <div class="err" id="bErr"></div>
+  <div class="row" style="margin-top:14px"><span class="dim" id="bSummary" style="flex:1"></span>
+    <button class="primary" id="bSave">Save to my library</button></div>
+</div></div>
+
+<!-- map & rules -->
+<div class="modal" id="mapModal"><div class="dialog">
+  <div class="head"><h3 id="mapTitle">Map & rules</h3><button class="ghost" data-close>✕</button></div>
+  <img class="preview" id="mapImg" alt="map of the level">
+  <div class="legend" style="margin:6px 0 10px"><span><i style="background:#fff"></i>start</span>
+    <span><i style="background:#46c8ff"></i>GPS route</span><span><i style="background:#50e68c"></i>parking spot</span></div>
+  <div id="mapRules"></div>
+</div></div>
+
 <script>
 const $ = id => document.getElementById(id);
-let LEVELS = [], SEL = 1, STATE = null, lastPhase = null;
+let CAT = null, SEL = 1, STATE = null, lastPhase = null, RECIPE = {terms:{}, custom_ids:[]}, EDIT = null;
 const post = (u, b) => fetch(u, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b||{})}).then(r => r.json());
 const starStr = n => '★'.repeat(n) + '☆'.repeat(3 - n);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const LV = () => CAT.levels.find(l => l.id === SEL);
+const prog = id => (STATE && STATE.progress[String(id)]) || {};
+const meas = name => CAT.measurements.find(m => m.name === name);
+const libItem = id => (STATE ? STATE.library : []).find(x => x.id === id);
+for (const el of document.querySelectorAll('[data-close]')) el.onclick = () => el.closest('.modal').classList.remove('open');
+for (const m of document.querySelectorAll('.modal')) m.onclick = e => { if (e.target === m) m.classList.remove('open'); };
 
-async function loadLevels() {
-  LEVELS = (await (await fetch('/api/levels')).json()).levels;
-}
-function prog(id) { return (STATE && STATE.progress[String(id)]) || {}; }
-
+// ---------------- levels ----------------
+function unlocked(id) { return id === 1 || (prog(id - 1).stars || 0) >= 1; }
 function renderLevels() {
-  const nav = $('levels'); nav.innerHTML = '';
-  let total = 0;
-  for (const lv of LEVELS) {
+  const nav = $('levels'); nav.innerHTML = ''; let total = 0;
+  for (const lv of CAT.levels) {
     const p = prog(lv.id); total += p.stars || 0;
+    const open = lv.available && unlocked(lv.id);
     const d = document.createElement('div');
-    const open = lv.available && lv.unlocked;
     d.className = 'lvl' + (lv.id === SEL ? ' sel' : '') + (open ? '' : ' locked');
-    d.innerHTML = `<span class="num">${lv.id}</span><span class="nm">${lv.name}</span>` +
-      (lv.available ? (lv.unlocked ? `<span class="st">${starStr(p.stars || 0)}</span>` : '<span>🔒</span>')
-                    : '<span class="soon">soon</span>');
+    d.innerHTML = `<span class="num">${lv.id}</span><span class="nm">${esc(lv.name)}</span>` +
+      (lv.available ? (unlocked(lv.id) ? `<span class="st">${starStr(p.stars || 0)}</span>` : '<span>🔒</span>') : '<span class="soon">soon</span>');
     if (open) d.onclick = () => selectLevel(lv.id);
     nav.appendChild(d);
   }
-  $('total').textContent = '★ ' + total + ' / ' + 3 * LEVELS.filter(l => l.available).length;
+  $('total').textContent = '★ ' + total + ' / ' + 3 * CAT.levels.filter(l => l.available).length;
 }
-
+function scoreText(lv) {
+  return 'Score: distance 400 + parking 400 + ' + (lv.score === 'precision' ? 'precision' : 'speed') + ' 200' + (lv.rules ? ' − rule penalties' : '');
+}
 function renderHeader() {
-  const lv = LEVELS.find(l => l.id === SEL);
-  const p = prog(lv.id);
-  $('lvStars').innerHTML = lv.stars.map((t, i) => `<span class="chip">${'★'.repeat(i + 1)} ${t}+</span>`).join('') +
-    (p.best !== undefined ? `<span class="chip">your best: <b>${p.best}</b></span>` : '') +
-    (p.attempts ? `<span class="chip">attempts: ${p.attempts}</span>` : '');
-  $('loadBest').hidden = !p.best_weights;
-}
-function renderLevel() {
-  const lv = LEVELS.find(l => l.id === SEL);
+  const lv = LV(), p = prog(lv.id);
   $('lvTitle').textContent = `Level ${lv.id}: ${lv.name}`;
   $('lvBrief').textContent = lv.brief;
-  $('lvScore').textContent = lv.score === 'precision'
-    ? 'Score: distance 400 + parking 400 + precision 200'
-    : 'Score: distance 400 + parking 400 + speed 200' + (lv.rules ? ' - rule penalties' : '');
-  const p = prog(lv.id);
+  $('lvScore').textContent = scoreText(lv);
   $('lvStars').innerHTML = lv.stars.map((t, i) => `<span class="chip">${'★'.repeat(i + 1)} ${t}+</span>`).join('') +
     (p.best !== undefined ? `<span class="chip">your best: <b>${p.best}</b></span>` : '') +
     (p.attempts ? `<span class="chip">attempts: ${p.attempts}</span>` : '');
-  // workshop
-  const tb = $('terms'); tb.innerHTML = '';
-  for (const t of lv.terms) {
-    const tr = document.createElement('tr'); tr.className = 'off'; tr.dataset.term = t.name;
-    tr.innerHTML = `<td><label class="switch"><input type="checkbox"><span></span></label></td>
-      <td class="nm"><span class="sign ${t.sign > 0 ? 'p' : 'm'}">${t.sign > 0 ? '+' : '−'}</span>${t.name.replace(/_/g, ' ')}${t.new ? '<span class="new">new</span>' : ''}</td>
-      <td><input type="range" min="-3" max="3" step="0.01"></td>
-      <td><input type="number" step="any" min="0"></td>
-      <td class="help">${t.help} <span title="value used by the balanced preset">(suggested ${t.suggested})</span></td>`;
-    const cb = tr.querySelector('input[type=checkbox]'), rg = tr.querySelector('input[type=range]'), nb = tr.querySelector('input[type=number]');
-    const setW = w => { nb.value = +(+w).toPrecision(3); rg.value = Math.log10(Math.max(+w, 0.001)); };
-    setW(t.suggested);
-    rg.oninput = () => { nb.value = +Math.pow(10, +rg.value).toPrecision(2); };
-    nb.oninput = () => { rg.value = Math.log10(Math.max(+nb.value || 0.001, 0.001)); };
-    cb.onchange = () => tr.classList.toggle('off', !cb.checked);
-    tr.setW = setW; tr.cb = cb; tr.nb = nb;
-    tb.appendChild(tr);
-  }
-  $('minutes').value = lv.minutes; $('minutesLbl').textContent = lv.minutes;
-  $('loadBest').hidden = !p.best_weights;
-  if (p.last_weights) applyRecipe(p.last_weights);     // continue where you left off
-  const prevBest = prog(lv.id - 1).best_run;
-  $('initWrap').hidden = !(lv.id > 1 && prevBest);
-  $('results').hidden = true;
+  $('loadBest').hidden = !p.best_recipe;
+  $('initWrap').hidden = !(lv.id > 1 && prog(lv.id - 1).best_run);
 }
-function applyRecipe(w) {
-  for (const tr of $('terms').querySelectorAll('tr')) {
-    const r = w[tr.dataset.term];
-    tr.cb.checked = !!(r && r[0]); tr.classList.toggle('off', !tr.cb.checked);
-    if (r) tr.setW(r[1]);
-  }
-}
-$('loadBest').onclick = () => applyRecipe(prog(SEL).best_weights || {});
-$('minutes').oninput = e => $('minutesLbl').textContent = e.target.value;
-
 async function selectLevel(id) {
   if (STATE && (STATE.phase === 'training' || STATE.phase === 'testing')) return;
-  SEL = id; renderLevels(); renderLevel();
+  SEL = id; RECIPE = {terms:{}, custom_ids:[]};            // every visit starts EMPTY
+  $('minutes').value = LV().minutes; $('minutesLbl').textContent = LV().minutes;
+  $('results').hidden = true; $('msg').textContent = '';
+  renderLevels(); renderHeader(); renderRecipe();
   await post('/api/view', {level:id});
+  await refresh();
+}
+$('minutes').oninput = e => $('minutesLbl').textContent = e.target.value;
+$('loadBest').onclick = () => { const r = prog(SEL).best_recipe; if (r) { RECIPE = JSON.parse(JSON.stringify(r)); renderRecipe(); } };
+
+// ---------------- reward list ----------------
+function describeCustom(c) {
+  const cond = x => { const m = meas(x.m) || {label:x.m, unit:'', type:'num'};
+    return m.type === 'bool' ? `${m.label}${x.v === false || x.op === '!=' ? ' is false' : ''}` : `${m.label} ${x.op} ${x.v} ${m.unit}`; };
+  const when = (c.when && c.when.length) ? 'when ' + c.when.map(g => g.map(cond).join(' and ')).map(s => c.when.length > 1 ? `(${s})` : s).join(' or ') : 'always';
+  const times = c.times ? ` × ${(meas(c.times) || {label:c.times}).label}` : '';
+  return `${when} → ${c.give > 0 ? '+' : ''}${c.give}${times} points, ${c.paid === 'on_change' ? 'each time it becomes true' : 'every step'}`;
+}
+function renderRecipe() {
+  const box = $('rlist'); box.innerHTML = '';
+  const names = Object.keys(RECIPE.terms);
+  RECIPE.custom_ids = RECIPE.custom_ids.filter(id => libItem(id));
+  if (!names.length && !RECIPE.custom_ids.length) {
+    box.innerHTML = '<div class="empty">No rewards yet.<br>Press <b>+ Add reward</b> to give your car something to care about.</div>';
+  }
+  for (const n of names) {
+    const t = CAT.terms.find(x => x.name === n);
+    const d = document.createElement('div'); d.className = 'ritem';
+    d.innerHTML = `<div><div class="nm">${n.replace(/_/g, ' ')}<span class="tag">${t.paid}</span></div><div class="help">${esc(t.help)}</div></div>
+      <div class="pts"><input type="number" step="any" placeholder="points" value="${RECIPE.terms[n] ?? ''}"><span class="dim">points</span></div>
+      <button class="ghost" title="remove">✕</button>`;
+    const inp = d.querySelector('input');
+    inp.oninput = () => { RECIPE.terms[n] = inp.value; d.classList.remove('invalid'); };
+    d.querySelector('button').onclick = () => { delete RECIPE.terms[n]; renderRecipe(); };
+    box.appendChild(d);
+  }
+  for (const id of RECIPE.custom_ids) {
+    const c = libItem(id);
+    const d = document.createElement('div'); d.className = 'ritem';
+    d.innerHTML = `<div><div class="nm">${esc(c.name)}<span class="tag custom">custom</span></div><div class="help">${esc(describeCustom(c))}</div></div>
+      <button class="ghost" title="edit">✎ edit</button><button class="ghost" title="remove">✕</button>`;
+    const [eb, rb] = d.querySelectorAll('button');
+    eb.onclick = () => openBuilder(c);
+    rb.onclick = () => { RECIPE.custom_ids = RECIPE.custom_ids.filter(x => x !== id); renderRecipe(); };
+    box.appendChild(d);
+  }
 }
 
-$('train').onclick = async () => {
-  const terms = {};
-  let any = false;
-  for (const tr of $('terms').querySelectorAll('tr')) {
-    terms[tr.dataset.term] = {enabled: tr.cb.checked, weight: +tr.nb.value || 0};
-    if (tr.cb.checked && +tr.nb.value > 0) any = true;
+// ---------------- + Add reward picker ----------------
+$('addBtn').onclick = () => { renderPicker(); $('pickModal').classList.add('open'); };
+function renderPicker() {
+  $('pBuilt').innerHTML = '';
+  for (const t of CAT.terms) {
+    const added = t.name in RECIPE.terms;
+    const c = document.createElement('div'); c.className = 'pcard' + (added ? ' added' : '');
+    c.innerHTML = `<div class="nm">${t.name.replace(/_/g, ' ')}<span class="tag">${t.paid}</span>${added ? '<span class="tag">added</span>' : ''}</div><div class="help">${esc(t.help)}</div>`;
+    if (!added) c.onclick = () => { RECIPE.terms[t.name] = ''; $('pickModal').classList.remove('open'); renderRecipe();
+      setTimeout(() => { const ins = $('rlist').querySelectorAll('input'); if (ins.length) ins[Object.keys(RECIPE.terms).indexOf(t.name)].focus(); }, 0); };
+    $('pBuilt').appendChild(c);
   }
-  if (!any) { $('msg').textContent = 'Switch on at least one reward term - otherwise the car learns nothing.'; return; }
+  $('pCustom').innerHTML = STATE.library.length ? '' : '<div class="dim">None yet - create one below.</div>';
+  for (const item of STATE.library) {
+    const added = RECIPE.custom_ids.includes(item.id);
+    const c = document.createElement('div'); c.className = 'pcard' + (added ? ' added' : '');
+    c.innerHTML = `<div class="nm">${esc(item.name)}<span class="tag custom">custom</span>${added ? '<span class="tag">added</span>' : ''}</div>
+      <div class="help">${esc(describeCustom(item))}</div><div class="acts"><button class="ghost" data-a="edit">✎ edit</button><button class="ghost" data-a="del">🗑 delete</button></div>`;
+    c.querySelector('[data-a=edit]').onclick = e => { e.stopPropagation(); $('pickModal').classList.remove('open'); openBuilder(item); };
+    c.querySelector('[data-a=del]').onclick = async e => { e.stopPropagation();
+      if (!confirm(`Delete "${item.name}" from your library? It disappears from every level.`)) return;
+      await post('/api/library/delete', {id:item.id}); await refresh(); renderPicker(); renderRecipe(); };
+    if (!added) c.onclick = () => { RECIPE.custom_ids.push(item.id); $('pickModal').classList.remove('open'); renderRecipe(); };
+    $('pCustom').appendChild(c);
+  }
+}
+$('newCustom').onclick = () => { $('pickModal').classList.remove('open'); openBuilder(null); };
+
+// ---------------- rule builder ----------------
+function measOptions(sel, onlyNum) {
+  let html = '', grp = null;
+  for (const m of CAT.measurements) {
+    if (onlyNum && m.type !== 'num') continue;
+    if (m.group !== grp) { if (grp) html += '</optgroup>'; html += `<optgroup label="${m.group}">`; grp = m.group; }
+    html += `<option value="${m.name}" ${m.name === sel ? 'selected' : ''}>${esc(m.label)}${m.unit ? ' (' + m.unit + ')' : ''}</option>`;
+  }
+  return html + '</optgroup>';
+}
+function openBuilder(item) {
+  EDIT = item ? JSON.parse(JSON.stringify(item)) : {id:null, name:'', when:[], give:'', times:null, paid:'every_step'};
+  $('bTitle').textContent = item ? 'Edit custom reward' : 'New custom reward';
+  $('bName').value = EDIT.name; $('bGive').value = EDIT.give;
+  $('bTimes').innerHTML = '<option value="">(fixed amount)</option>' + measOptions(EDIT.times, true).replace(/<option value/g, '<option value').replace(/>([^<]+)<\/option>/g, (m, l) => `>× ${l}</option>`);
+  $('bTimes').value = EDIT.times || '';
+  for (const r of document.querySelectorAll('input[name=bPaid]')) r.checked = r.value === EDIT.paid;
+  $('bErr').textContent = '';
+  renderGroups(); $('builderModal').classList.add('open');
+}
+function readBuilder() {
+  EDIT.name = $('bName').value.trim(); EDIT.give = $('bGive').value;
+  EDIT.times = $('bTimes').value || null;
+  EDIT.paid = document.querySelector('input[name=bPaid]:checked').value;
+}
+function renderGroups() {
+  const box = $('bGroups'); box.innerHTML = '';
+  EDIT.when.forEach((g, gi) => {
+    if (gi) box.insertAdjacentHTML('beforeend', '<div class="or">OR</div>');
+    const G = document.createElement('div'); G.className = 'group';
+    G.innerHTML = `<div class="glabel">ALL of these:<button class="ghost">remove box</button></div>`;
+    G.querySelector('button').onclick = () => { readBuilder(); EDIT.when.splice(gi, 1); renderGroups(); };
+    g.forEach((c, ci) => {
+      const m = meas(c.m);
+      const row = document.createElement('div'); row.className = 'cond';
+      const isBool = m.type === 'bool';
+      row.innerHTML = `<select data-k="m">${measOptions(c.m, false)}</select>` +
+        (isBool ? `<select data-k="v"><option value="true" ${c.v !== false ? 'selected' : ''}>is true</option><option value="false" ${c.v === false ? 'selected' : ''}>is false</option></select>`
+                : `<select data-k="op">${CAT.operators.map(o => `<option ${o === c.op ? 'selected' : ''}>${o}</option>`).join('')}</select>
+                   <input type="number" step="any" data-k="v" value="${c.v ?? ''}" placeholder="value"><span class="dim">${m.unit}</span>`) +
+        `<button class="ghost">✕</button>`;
+      row.querySelector('[data-k=m]').onchange = e => { readBuilder(); const nm = meas(e.target.value);
+        g[ci] = nm.type === 'bool' ? {m:nm.name, op:'is', v:true} : {m:nm.name, op:'>', v:''}; renderGroups(); };
+      const opSel = row.querySelector('[data-k=op]'); if (opSel) opSel.onchange = e => { c.op = e.target.value; summary(); };
+      const vEl = row.querySelector('[data-k=v]');
+      vEl.oninput = vEl.onchange = e => { c.v = isBool ? e.target.value === 'true' : e.target.value; if (isBool) c.op = 'is'; summary(); };
+      row.querySelector('button.ghost').onclick = () => { readBuilder(); g.splice(ci, 1); if (!g.length) EDIT.when.splice(gi, 1); renderGroups(); };
+      G.appendChild(row);
+    });
+    const add = document.createElement('button'); add.textContent = '+ condition'; add.className = 'ghost';
+    add.onclick = () => { readBuilder(); g.push({m:'speed_kmh', op:'>', v:''}); renderGroups(); };
+    G.appendChild(add); box.appendChild(G);
+  });
+  if (!EDIT.when.length) box.insertAdjacentHTML('beforeend', '<div class="dim">No conditions: the reward fires every step (or once, with "each time it becomes true").</div>');
+  summary();
+}
+$('bAddGroup').onclick = () => { readBuilder(); EDIT.when.push([{m:'speed_kmh', op:'>', v:''}]); renderGroups(); };
+for (const id of ['bName', 'bGive', 'bTimes']) $(id).addEventListener('input', () => { readBuilder(); summary(); });
+for (const r of document.querySelectorAll('input[name=bPaid]')) r.onchange = () => { readBuilder(); summary(); };
+function summary() {
+  const c = {...EDIT, give: EDIT.give === '' ? '?' : +EDIT.give,
+             when: EDIT.when.map(g => g.map(x => ({...x, v: x.v === '' ? '?' : x.v})))};
+  $('bSummary').textContent = describeCustom(c);
+}
+$('bSave').onclick = async () => {
+  readBuilder();
+  if (!EDIT.name) { $('bErr').textContent = 'Give your reward a name.'; return; }
+  if (EDIT.give === '' || isNaN(+EDIT.give)) { $('bErr').textContent = 'Type how many points it gives (any number, negative = a penalty).'; return; }
+  for (const g of EDIT.when) for (const c of g) if (meas(c.m).type === 'num' && (c.v === '' || isNaN(+c.v))) { $('bErr').textContent = 'Every condition needs a number value.'; return; }
+  const item = {...EDIT, give:+EDIT.give, when: EDIT.when.map(g => g.map(c => meas(c.m).type === 'num' ? {m:c.m, op:c.op, v:+c.v} : {m:c.m, op:'is', v:c.v !== false}))};
+  const r = await post('/api/library/save', {item});
+  if (r.status !== 'ok') { $('bErr').textContent = r.status; return; }
+  $('builderModal').classList.remove('open');
+  await refresh();
+  if (!RECIPE.custom_ids.includes(r.item.id)) RECIPE.custom_ids.push(r.item.id);
+  renderRecipe();
+};
+
+// ---------------- map & rules ----------------
+$('mapBtn').onclick = () => {
+  const lv = LV();
+  $('mapTitle').textContent = `Level ${lv.id}: ${lv.name} - map & rules`;
+  $('mapImg').src = '/api/preview.png?level=' + lv.id;
+  $('mapRules').innerHTML = `<p>${esc(lv.brief)}</p>
+    <ul><li>${scoreText(lv)} per test drive, averaged over 12 roads the car has never seen.</li>
+    <li>Driving the whole route is worth about as much as parking (400 each). Parking adds up to 200 for ${lv.score === 'precision' ? 'precision' : 'speed'}.</li>
+    ${lv.rules ? '<li>−40 per red light, rolled stop sign or crosswalk violation; −10 per km/h too fast in a school zone.</li>' : ''}
+    <li>No speed limits except in school zones.</li>
+    <li>Stars: ${lv.stars.map((t, i) => '★'.repeat(i + 1) + ' ' + t + '+').join(' · ')}. One star unlocks the next level.</li>
+    <li>Your reward is how the car LEARNS; the score is how it is JUDGED. They don't have to be the same!</li></ul>`;
+  $('mapModal').classList.add('open');
+};
+
+// ---------------- train ----------------
+$('train').onclick = async () => {
   $('msg').textContent = '';
-  const r = await post('/api/train', {level:SEL, terms, minutes:+$('minutes').value, init_prev:$('initPrev').checked});
-  if (r.status !== 'ok') $('msg').textContent = r.status;
+  const terms = {}; let bad = false;
+  $('rlist').querySelectorAll('.ritem').forEach(d => d.classList.remove('invalid'));
+  Object.keys(RECIPE.terms).forEach((n, i) => {
+    const v = RECIPE.terms[n];
+    if (v === '' || isNaN(+v)) { bad = true; $('rlist').querySelectorAll('.ritem')[i].classList.add('invalid'); }
+    else terms[n] = +v;
+  });
+  if (bad) { $('msg').textContent = 'Type a number of points for every reward in your list (negative = a penalty).'; return; }
+  if (!Object.keys(terms).length && !RECIPE.custom_ids.length &&
+      !confirm('No rewards: every step is worth 0 points, so the car will learn nothing. Train anyway?')) return;
+  const r = await post('/api/train', {level:SEL, recipe:{terms, custom_ids:RECIPE.custom_ids}, minutes:+$('minutes').value, init_prev:$('initPrev').checked});
+  if (r.status !== 'ok') $('msg').textContent = r.status; else refresh();
 };
 $('stop').onclick = () => post('/api/stop');
 $('next').onclick = () => fetch('/control?cmd=next');
 $('speed').onchange = e => fetch('/control?cmd=speed&v=' + e.target.value);
 
+// ---------------- fullscreen ----------------
+$('fsBtn').onclick = () => $('liveCard').requestFullscreen && $('liveCard').requestFullscreen();
+$('fsExit').onclick = () => document.exitFullscreen();
+document.addEventListener('fullscreenchange', () => {
+  const fs = document.fullscreenElement === $('liveCard');
+  $('fsExit').hidden = !fs; $('trainBox').hidden = !(STATE && (STATE.phase === 'training' || STATE.phase === 'testing'));
+  if (!fs) $('fsResult').classList.remove('show');
+});
+
+// ---------------- state ----------------
 function drawChart(curve, minutes) {
-  const svg = $('chart'); const W = 400, H = 110;
-  const T = Math.max(minutes * 60, 1);
+  const W = 400, H = 100, T = Math.max(minutes * 60, 1);
   let g = `<line x1="0" y1="${H - 1}" x2="${W}" y2="${H - 1}" stroke="#2a2f3a"/>`;
   for (const y of [0.25, 0.5, 0.75]) g += `<line x1="0" y1="${H - y * H}" x2="${W}" y2="${H - y * H}" stroke="#20242c"/>`;
   if (curve.length > 1) {
-    const pts = curve.map(([t, v]) => `${(t / T * W).toFixed(1)},${(H - v * (H - 4) - 2).toFixed(1)}`).join(' ');
-    g += `<polyline points="${pts}" fill="none" stroke="#4aa3ff" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+    g += `<polyline points="${curve.map(([t, v]) => `${(t / T * W).toFixed(1)},${(H - v * (H - 4) - 2).toFixed(1)}`).join(' ')}" fill="none" stroke="#4aa3ff" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
     const last = curve[curve.length - 1];
-    g += `<text x="${Math.min(last[0] / T * W + 4, W - 34)}" y="${H - last[1] * (H - 4) - 6}" fill="#e8eaee" font-size="11">${Math.round(last[1] * 100)}%</text>`;
+    g += `<text x="${Math.min(last[0] / T * W + 4, W - 34)}" y="${Math.max(H - last[1] * (H - 4) - 6, 12)}" fill="#e8eaee" font-size="11">${Math.round(last[1] * 100)}%</text>`;
   }
-  svg.innerHTML = g;
+  $('chart').innerHTML = g;
 }
-
+function setLive(on) {
+  $('liveCard').hidden = !on; $('work').classList.toggle('with-live', on);
+  if (on && !$('view').src.includes('stream')) $('view').src = '/stream.mjpg';
+  if (!on && $('view').src) $('view').removeAttribute('src');      // stop streaming = no rendering
+}
 function renderState() {
-  const s = STATE;
-  const busy = s.phase === 'training' || s.phase === 'testing';
-  $('train').disabled = busy;
-  for (const el of $('workshop').querySelectorAll('input,button')) if (el.id !== 'train') el.disabled = busy;
+  const s = STATE, busy = s.phase === 'training' || s.phase === 'testing';
+  setLive(s.live && s.level === SEL);
+  $('train').disabled = busy; $('addBtn').disabled = busy;
   $('trainBox').hidden = !busy;
   $('viewSub').textContent = s.viewer || '';
   if (s.phase === 'training') {
-    $('viewTitle').textContent = 'Training - live';
-    $('phaseLbl').textContent = 'Training';
+    $('viewTitle').textContent = 'Training - live'; $('phaseLbl').textContent = 'Training';
     $('stageLbl').textContent = s.stage ? 'practising: ' + s.stage : '';
-    const frac = Math.min(s.elapsed / (s.minutes * 60), 1);
-    $('timebar').style.width = (frac * 100) + '%';
-    $('timeLbl').textContent = `${(s.elapsed / 60).toFixed(1)} / ${s.minutes} min   ·   ${s.steps.toLocaleString()} practice steps`;
-    drawChart(s.curve, s.minutes);
-    $('log').textContent = s.log.join('\n');
+    $('timebar').style.width = Math.min(s.elapsed / (s.minutes * 60), 1) * 100 + '%';
+    $('timeLbl').textContent = `${(s.elapsed / 60).toFixed(1)} / ${s.minutes} min · ${s.steps.toLocaleString()} practice steps`;
+    drawChart(s.curve, s.minutes); $('log').textContent = s.log.join('\n');
   } else if (s.phase === 'testing') {
-    $('viewTitle').textContent = 'Hidden test';
-    $('phaseLbl').textContent = `Testing on new roads: ${s.test[0]} / ${s.test[1]}`;
-    $('stageLbl').textContent = '';
-    $('timebar').style.width = (s.test[1] ? s.test[0] / s.test[1] * 100 : 0) + '%';
+    $('viewTitle').textContent = 'Hidden test'; $('phaseLbl').textContent = `Testing on new roads: ${s.test[0]} / ${s.test[1]}`;
+    $('stageLbl').textContent = ''; $('timebar').style.width = (s.test[1] ? s.test[0] / s.test[1] * 100 : 0) + '%';
     $('timeLbl').textContent = 'The live view shows your trained car on test-like roads.';
   } else {
-    $('viewTitle').textContent = s.phase === 'done' ? 'Your trained car' : (prog(SEL).best_run ? 'Your best car' : 'Untrained car');
+    $('viewTitle').textContent = s.phase === 'done' ? 'Your trained car' : 'Your best car';
   }
   if (s.phase === 'done' && lastPhase !== 'done' && s.result) showResult(s.result);
-  if (lastPhase && lastPhase !== s.phase && s.phase === 'done') { loadLevels().then(() => { renderLevels(); }); }
   lastPhase = s.phase;
 }
-
-function showResult(r) {
-  $('results').hidden = false;
-  if (r.error) { $('score').textContent = '—'; $('hints').innerHTML = `<div class="hint">${r.error}</div>`; return; }
-  $('score').textContent = Math.round(r.score);
-  $('resStars').textContent = starStr(r.stars);
-  $('newBest').hidden = !r.new_best;
-  $('drives').innerHTML = r.drives.map(d => {
+function resultHTML(r) {
+  if (r.error) return `<div class="hint">${esc(r.error)}</div>`;
+  const bars = r.drives.map(d => {
     const col = d.status === 'parked' ? 'var(--ok)' : (d.status === 'collision' || d.status === 'pedestrian_hit') ? 'var(--bad)' : 'var(--warn)';
     return `<div title="${d.status} · ${d.score} pts · ${d.time}s · ${d.avg_speed_kmh} km/h" style="background:${col}; height:${Math.max(d.score / 10, 3)}%"></div>`;
   }).join('');
-  $('hints').innerHTML = r.hints.map(h => `<div class="hint">${h}</div>`).join('');
-  renderHeader(); renderLevels(); $('results').hidden = false;
-  $('results').scrollIntoView({behavior:'smooth', block:'nearest'});
+  return `<div class="row"><h3>Test results</h3><span class="dim">12 roads the car has never seen</span></div>
+    <div class="row" style="gap:28px; margin-top:8px"><div><div class="big">${Math.round(r.score)}</div><div class="dim">points (average)</div></div>
+      <div class="stars">${starStr(r.stars)}</div>${r.new_best ? '<span class="chip" style="color:var(--gold)">New best!</span>' : ''}</div>
+    <div class="drives">${bars}</div>
+    <div class="legend"><span><i style="background:var(--ok)"></i>parked</span><span><i style="background:var(--bad)"></i>crash</span>
+      <span><i style="background:var(--warn)"></i>lost / stuck / too slow</span><span>bar height = points</span></div>
+    <h3 style="font-size:14px; margin:14px 0 4px">Hints</h3>${r.hints.map(h => `<div class="hint">${esc(h)}</div>`).join('')}`;
 }
-
-async function poll() {
-  try { STATE = await (await fetch('/api/state')).json(); renderState(); if (!document.querySelector('.lvl')) renderLevels(); }
-  catch (e) {}
-  setTimeout(poll, 1000);
+function showResult(r) {
+  $('results').innerHTML = resultHTML(r); $('results').hidden = false;
+  $('fsResult').innerHTML = resultHTML(r) + '<div style="margin-top:12px; text-align:right"><button onclick="document.getElementById(\'fsResult\').classList.remove(\'show\')">Close</button></div>';
+  if (document.fullscreenElement === $('liveCard')) $('fsResult').classList.add('show');
+  renderHeader(); renderLevels();
+  if (!document.fullscreenElement) $('results').scrollIntoView({behavior:'smooth', block:'nearest'});
 }
+async function refresh() { STATE = await (await fetch('/api/state')).json(); renderState(); }
+async function poll() { try { await refresh(); } catch (e) {} setTimeout(poll, 1000); }
 
-// ---------------- sound (same files and logic as watch.py) ----------------
+// ---------------- sound ----------------
 let ac = null, buf = {}, engine = null, engGain = null, sqGain = null, lastBlink = false;
 const FILES = {engine:'engine_loop.ogg', brake:'brake_squeal.ogg', horn:'horn.ogg', crash1:'crash_metal.ogg',
   crash2:'crash_glass.ogg', thud:'ped_hit.ogg', tick:'turn_tick.ogg', ping:'light_change.ogg',
@@ -328,10 +536,11 @@ es.onmessage = m => {
 };
 
 (async () => {
-  await loadLevels();
-  STATE = await (await fetch('/api/state')).json();
+  CAT = await (await fetch('/api/catalog')).json();
+  await refresh();
   SEL = STATE.level;
-  renderLevels(); renderLevel(); renderState();
+  $('minutes').value = LV().minutes; $('minutesLbl').textContent = LV().minutes;
+  renderLevels(); renderHeader(); renderRecipe();
   if (STATE.result && STATE.phase === 'done') showResult(STATE.result);
   poll();
 })();

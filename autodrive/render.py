@@ -37,7 +37,7 @@ import pygame
 from .city import (AISLE_HW, CORNER_OFF, CROSSWALK_W, LANE_OFF, LANE_W, PARKED_OFF, ROAD_HW,
                    SIDEWALK_W, SLOT_D, SLOT_W, STOPLINE_D, right_of)
 from .geometry import obb_corners, wrap_angle
-from .rewards import TERMS
+from .rewards import active_names
 from .sensors import CAMERAS, CLS_NONE, CLS_PED, CLS_STATIC, CLS_VEHICLE
 from .vehicle import LENGTH, WIDTH
 
@@ -394,6 +394,25 @@ class Renderer:
             S.blit(sh, (px - size // 2 + 6, py - size // 2 + 8))
             S.blit(img, (px - size // 2, py - size // 2))
         return S
+
+    def overview(self, env, max_w=1200, max_h=800):
+        """A still picture of the whole level: map, route, start and parking spot.
+        Returns an (H, W, 3) uint8 array (used by the game's "Map & rules" panel)."""
+        S = self._build_static(env).copy()
+        ps = self.w2s_static
+        pts = [ps(p) for p in env.route.pts[::4]]
+        if len(pts) > 1:
+            pygame.draw.lines(S, C["route"], False, pts, 6)
+        sl = env.slot
+        box = [sl["center"][0], sl["center"][1], SLOT_D / 2 - 0.2, SLOT_W / 2 - 0.2, sl["heading"]]
+        pygame.draw.polygon(S, C["target"], [ps(c) for c in obb_corners(box)], 6)
+        start = ps(env.car.pos)
+        pygame.draw.circle(S, (255, 255, 255), start, 16)
+        pygame.draw.circle(S, C["accent"], start, 16, 5)
+        w, h = S.get_size()
+        k = min(max_w / w, max_h / h, 1.0)
+        S = pygame.transform.smoothscale(S, (int(w * k), int(h * k)))
+        return np.frombuffer(pygame.image.tobytes(S, "RGB"), np.uint8).reshape(S.get_height(), S.get_width(), 3)
 
     def _road_text(self, S, text, pos, direction, color):
         # Road paint reads from the driver's seat: the word runs ACROSS the lane
@@ -846,8 +865,7 @@ class Renderer:
         self._text(f"{env.stages[stg]['name']}   t={env.t:5.1f}s", (30, 186), "tiny", C["hud_dim"])
 
         # ---------- right: reward breakdown ----------
-        enabled = [k for k in TERMS if env.reward_cfg["terms"][k]["enabled"]
-                   and env.reward_cfg["terms"][k]["weight"] > 0]
+        enabled = active_names(env.reward_cfg)          # built-in + custom rewards in use
         ph = 64 + 19 * len(enabled)
         x0 = self.W - 314
         self._panel(pygame.Rect(x0, 14, 300, ph))
@@ -861,7 +879,8 @@ class Renderer:
             yy = 62 + j * 19
             v = env.ep[k]
             active = abs(env.last_terms.get(k, 0.0)) > 1e-9
-            self._text(k.replace("_", " "), (x0 + 16, yy), "tiny", C["hud_fg"] if active else C["hud_dim"])
+            label = k.replace("custom_", "★ ", 1).replace("_", " ")
+            self._text(label[:24], (x0 + 16, yy), "tiny", C["hud_fg"] if active else C["hud_dim"])
             bw = int(70 * abs(v) / vmax)
             col = C["pos"] if v >= 0 else C["neg"]
             bx = x0 + 160

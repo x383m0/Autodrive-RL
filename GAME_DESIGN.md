@@ -38,6 +38,21 @@ zones. Going fast is the point; the challenge is going fast without crashing.
 Driving the whole way is worth about as much as parking itself. Stars (1-3)
 for passing score thresholds; 1 star unlocks the next level.
 
+## The reward workshop
+
+- Every visit to a level starts with an **empty** reward list ("Load my best
+  recipe" restores your best one).
+- **+ Add reward** lists all 18 built-in rewards (every level, no unlocking),
+  your custom rewards, and "Create custom reward...". No suggested numbers.
+- The number you type is **the points given** (any sign).
+- **Custom rewards**: rule builder with AND-boxes joined by OR, a fixed or
+  "x measurement" amount, paid every step or each time it becomes true;
+  saved in a personal library (live link). Details:
+  `.plans/reward-workshop-redesign-spec.md`.
+- The live view appears once you train in a level (before that: "Map & rules"
+  shows a map preview and the scoring); it has a fullscreen mode with
+  progress, controls and the results popup.
+
 ## Training
 
 - The player chooses the training time.

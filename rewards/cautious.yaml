@@ -3,15 +3,17 @@
 # =============================================================================
 #  Every term below has:
 #     enabled: true/false   -> switch the term on or off
-#     weight:  number >= 0  -> how much it matters
+#     weight:  any number   -> THE POINTS GIVEN when it happens
+#                              (positive = gain points, negative = lose points)
 #
-#  Bonuses ADD  weight x signal to the reward, penalties SUBTRACT it.
-#  Always write positive weights; whether a term is a bonus or a penalty is
-#  fixed (see the [+] / [-] tags).
+#  Event terms give their points once (e.g. collision: -50 when it crashes).
+#  Step terms give points x an amount every step (e.g. progress: 0.1 per metre).
+#  [+]/[-] tags show how each term is USUALLY used; nothing is flipped for you.
+#  You can also add your own rules under "custom:" (see REWARD_GUIDE.md).
 #
 #  Scale intuition: the agent drives ~1 metre per step (0.1 s at 36 km/h), so
 #  with progress weight 0.1 a typical 300 m route is worth ~30 points.
-#  A one-off penalty of 50 therefore "costs" as much as 500 m of driving.
+#  A one-off -50 therefore "costs" as much as 500 m of driving.
 #
 #  Try:  python train.py --reward rewards.yaml --name my_experiment
 #  Read REWARD_GUIDE.md for what each term does and how to tune it.
@@ -19,6 +21,7 @@
 #  tolerance is 0, the time cost is off. Expect a slower, more hesitant car.
 #  Risk: too much fear -> it may learn to creep or stop (watch "stall").
 # =============================================================================
+format: 2          # weights are signed points (see the header)
 name: cautious
 description: Safety first - huge penalties for rules and pedestrians, happy to drive slower.
 
@@ -43,83 +46,83 @@ terms:
   # [-] Hitting a car, a parked car or a building. Ends the episode.
   collision:
     enabled: true
-    weight: 100.0
+    weight: -100.0
 
   # [-] Hitting a pedestrian. Ends the episode. Should be the worst thing.
   pedestrian_hit:
     enabled: true
-    weight: 300.0
+    weight: -300.0
 
   # [-] Per step: being close to a pedestrian (within ped_proximity_radius_m)
   #     WHILE moving. 0 when stopped, max when touching and >= 3 m/s.
   #     This is what teaches "slow down near people" before an accident.
   pedestrian_proximity:
     enabled: true
-    weight: 0.4
+    weight: -0.4
 
   # [-] One-off: driving over a crosswalk while a pedestrian is on it.
   crosswalk_yield:
     enabled: true
-    weight: 30.0
+    weight: -30.0
 
   # [-] Per step: metres/second above the speed limit (+ speed_tolerance_kmh).
   #     1 m/s = 3.6 km/h. At weight 0.05, 10 km/h over costs 0.14 per step,
   #     which outweighs the extra progress gained (~0.03 per step).
   speeding:
     enabled: true
-    weight: 0.2
+    weight: -0.2
 
   # [-] One-off: front bumper crosses the stop line while the light is red.
   red_light:
     enabled: true
-    weight: 50.0
+    weight: -50.0
 
   # [-] One-off: passing a stop sign without coming (almost) to a stop.
   stop_sign:
     enabled: true
-    weight: 30.0
+    weight: -30.0
 
   # [-] Per step: metres away from the lane centre beyond lane_deadband_m.
   #     Also punishes drifting into the oncoming lane. In the parking lot it
   #     measures the distance from the planned path into the slot.
   lane_deviation:
     enabled: true
-    weight: 0.06
+    weight: -0.06
 
   # [-] Per step: fraction of the car's corners on the sidewalk / grass.
   off_road:
     enabled: true
-    weight: 0.5
+    weight: -0.5
 
   # [-] Per step: jerk (change of acceleration) + steering speed.
   #     Small weight = smoother ride. Large weight = timid, sluggish driving.
   comfort:
     enabled: true
-    weight: 0.03
+    weight: -0.03
 
   # [-] Per step: standing still (< stall_speed_ms) WITHOUT a reason
   #     (no red light, stop sign, car or pedestrian ahead). Anti-laziness.
   stall:
     enabled: true
-    weight: 0.02
+    weight: -0.02
 
   # [-] Per step: a flat cost of existing. Encourages finishing sooner.
   time:
     enabled: true
-    weight: 0.0
+    weight: 0
 
   # [-] One-off: wandering more than off_route_distance_m away from the route.
   #     Ends the episode.
   off_route:
     enabled: true
-    weight: 20.0
+    weight: -20.0
 
   # [-] One-off: standing still for stuck_seconds with no reason (no red
   #     light, stop sign, car or pedestrian ahead). Ends the episode.
   #     Without this, "freeze when in trouble" is a cheap way out of mistakes.
   stuck:
     enabled: true
-    weight: 20.0
+    weight: -20.0
 
   # [+] Per step: raw speed in m/s, no matter where you go.
   #     DANGER: this is a classic reward-hacking bait (drive in circles fast).

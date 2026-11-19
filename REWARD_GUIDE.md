@@ -9,22 +9,29 @@ experiments to try.
 
 Every 0.1 s the simulator measures what happened (metres advanced, speed vs
 limit, did we hit something, ...). Each measurement becomes a **signal**, and
-your YAML gives each term an on/off switch and a **weight**:
+you give each reward a number:
 
 ```
-reward this step = sum over switched-on terms of  (+ or -) weight x signal
+reward this step = sum over your rewards of   points x signal
 ```
 
-- **Bonuses** (+) add, **penalties** (-) subtract. The sign is fixed per term;
-  you always write positive weights.
-- **Per-step terms** are paid every step while something is true (speeding,
-  being off the road...). Their total grows with time.
-- **Event terms** are paid once (a red light, a collision, parking).
-- The agent maximises the **sum** of rewards over the episode, slightly
-  favouring rewards that come sooner (discount 0.99 per step, a ~10 s horizon).
+- **The number is the points given.** Positive = the car gains points,
+  negative = it loses points. `collision: -50` punishes crashing; `+50` would
+  reward it. Nothing is flipped behind your back.
+- **"Every step" rewards** pay points x an amount each 0.1 s (progress: per
+  metre; speeding: per m/s over the limit; stall: 1 per step). Their total
+  grows with time.
+- **"Once" rewards** pay their points when something happens (a red light, a
+  collision, parking).
+- The agent maximises the **sum** of points over the drive, slightly
+  favouring points that come sooner (discount 0.99 per step, a ~10 s horizon).
 
-The HUD (right panel in the videos) and `episodes.csv` show each term's
-running total, so you can always see *where* the reward came from.
+The HUD (right panel of the live view) and `episodes.csv` show each reward's
+running total, so you can always see *where* the points came from.
+
+In YAML files this is **format 2** (`format: 2` at the top). Older files
+without that line used positive weights with fixed directions; they are
+converted automatically when loaded.
 
 ## 2. Think in a common currency
 
@@ -32,38 +39,38 @@ The car drives about 1 m per step at normal speed, so with `progress: 0.1` one
 metre is worth 0.1 points and a 300 m trip about 30 points. Price everything
 else in "metres of driving":
 
-| Weight | Means |
+| Points | Means |
 |---|---|
-| `collision: 50` | a crash is as bad as losing 500 m of driving |
-| `red_light: 20` | running a red is worth 200 m |
-| `speeding: 0.05` per m/s | 10 km/h over (2.8 m/s) costs 0.14/step, which is more than the 0.03/step of extra progress it buys, so speeding doesn't pay |
-| `stall: 0.03` per step | standing still for no reason costs 0.3 points per second |
+| `collision: -50` | a crash is as bad as losing 500 m of driving |
+| `red_light: -20` | running a red costs as much as 200 m |
+| `speeding: -0.05` per m/s | 10 km/h over (2.8 m/s) costs 0.14/step, more than the 0.03/step of extra progress it buys, so speeding doesn't pay |
+| `stall: -0.03` per step | standing still for no reason costs 0.3 points per second |
 
 If a penalty is cheaper than the progress it saves, the car **will** break the
 rule. That is not a bug in the car; it's the deal you offered it.
 
 ## 3. The terms
 
-| Term | Kind | What it does | Balanced | Typical range | If too low | If too high |
+| Term | Paid | What it measures | Balanced | Typical | If too small | If too big |
 |---|---|---|---|---|---|---|
-| `progress` | + step | metres along the GPS route (overshooting the slot counts as going back) | 0.1 | 0.05-0.3 | no reason to go anywhere | rules become "cheap" |
-| `goal_reached` | + event | parked in the slot | 30 | 10-100 | may give up at the lot | fine, but sparse (see 4.4) |
-| `parking_precision` | + event | bonus x (1 - error) when parked | 15 | 0-30 | sloppy parking | — |
-| `collision` | - event | hit car/parked car/building, ends episode | 50 | 20-200 | crashes are "worth it" | too timid, freezes in tight spots |
-| `pedestrian_hit` | - event | ends episode | 100 | 100-500 | — | (keep it the worst thing) |
-| `pedestrian_proximity` | - step | fast near people | 0.1 | 0.05-0.5 | brushes past people | crawls through crowds |
-| `crosswalk_yield` | - event | drove over an occupied crosswalk | 10 | 5-30 | doesn't yield | — |
-| `speeding` | - step | m/s over limit + tolerance | 0.05 | 0.02-0.3 | speeds | drives well under the limit |
-| `red_light` | - event | crossed stop line on red | 20 | 10-100 | runs reds | brakes hard at every yellow |
-| `stop_sign` | - event | didn't stop (< 0.5 m/s) | 10 | 5-50 | rolls stops | — |
-| `lane_deviation` | - step | metres from the lane centre / planned path beyond deadband | 0.03 | 0.01-0.1 | wobbles, cuts corners | twitchy steering |
-| `off_road` | - step | share of the car on sidewalk/grass | 0.2 | 0.1-1 | sidewalk shortcuts | — |
-| `comfort` | - step | jerk + steering speed (each 0-1) | 0.01 | 0-0.05 | jerky ride | **sits still** (see 4.1) |
-| `stall` | - step | stopped without a reason | 0.03 | 0.01-0.1 | parks on the road | creeps through red lights?* |
-| `time` | - step | flat cost of existing | 0.005 | 0-0.02 | dawdles | rushes, risks more |
-| `off_route` | - event | > 6 m from the route, ends episode | 20 | 10-50 | wanders off | — |
-| `stuck` | - event | idle 12 s with no reason, ends episode | 20 | 10-50 | **freezes when in trouble** (4.7) | — |
-| `speed_bonus` | + step | raw speed anywhere | off | off! | — | drives fast circles (see 4.3) |
+| `progress` | every step | metres along the GPS route (overshooting the slot counts as going back) | 0.1 | 0.05 to 0.3 | no reason to go anywhere | rules become "cheap" |
+| `goal_reached` | once | parked in the slot | 30 | 10 to 100 | may give up at the lot | fine, but sparse (see 4.4) |
+| `parking_precision` | once | bonus x (1 - error) when parked | 15 | 0 to 30 | sloppy parking | — |
+| `collision` | once | hit car/parked car/building, ends episode | -50 | -200 to -20 | crashes are "worth it" | too timid, freezes in tight spots |
+| `pedestrian_hit` | once | ends episode | -100 | -500 to -100 | — | (keep it the worst thing) |
+| `pedestrian_proximity` | every step | fast near people | -0.1 | -0.5 to -0.05 | brushes past people | crawls through crowds |
+| `crosswalk_yield` | once | drove over an occupied crosswalk | -10 | -30 to -5 | doesn't yield | — |
+| `speeding` | every step | m/s over limit + tolerance | -0.05 | -0.3 to -0.02 | speeds | drives well under the limit |
+| `red_light` | once | crossed stop line on red | -20 | -100 to -10 | runs reds | brakes hard at every yellow |
+| `stop_sign` | once | didn't stop (< 0.5 m/s) | -10 | -50 to -5 | rolls stops | — |
+| `lane_deviation` | every step | metres from the lane centre / planned path beyond deadband | -0.03 | -0.1 to -0.01 | wobbles, cuts corners | twitchy steering |
+| `off_road` | every step | share of the car on sidewalk/grass | -0.2 | -1 to -0.1 | sidewalk shortcuts | — |
+| `comfort` | every step | jerk + steering speed (each 0-1) | -0.01 | -0.05 to -0 | jerky ride | **sits still** (see 4.1) |
+| `stall` | every step | stopped without a reason | -0.03 | -0.1 to -0.01 | parks on the road | creeps through red lights?* |
+| `time` | every step | flat cost of existing | -0.005 | -0.02 to -0 | dawdles | rushes, risks more |
+| `off_route` | once | > 6 m from the route, ends episode | -20 | -50 to -10 | wanders off | — |
+| `stuck` | once | idle 12 s with no reason, ends episode | -20 | -50 to -10 | **freezes when in trouble** (4.7) | — |
+| `speed_bonus` | every step | raw speed anywhere | off | off! | — | drives fast circles (see 4.3) |
 
 \* `stall` never punishes legitimate waiting (red light, stop sign, car or
 pedestrian ahead), so it is safe to raise. The simulator uses ground truth to
@@ -182,9 +189,48 @@ noise collapsing (we saw it fall to 0.05), learning rate, reward
 normalisation drifting between curriculum stages. Per-stage model snapshots
 (`experiments/<name>/stages/`) let you keep the best model anyway.
 
-## 5. A recipe for building a reward from scratch
+## 5. Custom rewards (your own rules)
 
-1. Start with `progress` + `goal_reached` + `collision`. Train with `--quick`
+When no built-in reward says what you mean, write a rule. In the game use
+**+ Add reward -> Create custom reward...**; in YAML add a `custom:` list:
+
+```yaml
+format: 2
+terms:
+  progress: {enabled: true, weight: 0.1}
+custom:
+  - name: slow near people
+    when:                                   # ANY box (group) is true...
+      - - {m: nearest_pedestrian_m, op: "<", v: 6}   # ...when ALL its conditions are true
+        - {m: speed_kmh, op: ">", v: 15}
+    give: -0.2                              # points (any sign)
+    times: null                             # or a measurement: points x that value
+    paid: every_step                        # or on_change: each time it becomes true
+```
+
+Measurements you can use (speeds in km/h, distances in metres):
+
+| Group | Measurements |
+|---|---|
+| Driving | `speed_kmh`, `accel`, `steering_pct`, `distance_m`, `to_spot_m`, `time_s` |
+| Position | `lane_offset_m`, `heading_err_deg`, `off_road`, `in_lot` |
+| Surroundings (from the car's sensors) | `nearest_car_m`, `nearest_pedestrian_m`, `obstacle_ahead_m` (999 = nothing seen) |
+| Events (true on the step it happens) | `crashed`, `hit_pedestrian`, `parked`, `ran_red_light`, `rolled_stop_sign`, `went_off_route`, `got_stuck` |
+
+Ideas to try:
+- **Keep your distance:** `obstacle_ahead_m < 8 and speed_kmh > 20` -> -0.1 every step.
+- **Smooth arrival:** `to_spot_m < 10` -> -0.02 x `speed_kmh` every step (slow down near the spot).
+- **Speed with care:** no conditions, give 0.003 x `speed_kmh` every step - then watch whether
+  the car starts farming speed (4.3).
+- **"Once" vs "every step":** `speed_kmh < 1` paid *on_change* costs each stop once;
+  paid *every_step* costs every moment of waiting - very different cars!
+
+Surroundings use what the car's **sensors** see, not the simulator's ground
+truth: a kid hidden behind a parked car counts only once it is visible.
+
+## 6. A recipe for building a reward from scratch
+
+1. Start with `progress` (+), `goal_reached` (+) and `collision` (-). Train with `--quick`
    to check it runs, then 20-40 minutes.
 2. Watch a video and read `plots/reward_terms.png`. Identify the worst
    behaviour.
@@ -193,21 +239,21 @@ normalisation drifting between curriculum stages. Per-stage model snapshots
 5. Repeat. Change one thing at a time, otherwise you can't tell which change
    did what.
 
-## 6. Experiments to try
+## 7. Experiments to try
 
 | Experiment | Change | What to look for |
 |---|---|---|
 | Minimal | only `progress` + `collision` + `goal_reached` | does it run red lights? (it can't know they matter) |
-| Fear | `collision: 500` | slower learning, freezing in the lot (4.2) |
+| Fear | `collision: -500` | slower learning, freezing in the lot (4.2) |
 | No stall | `stall` off | does it learn to idle on the road? |
-| Cheap rules | `red_light: 1`, `stop_sign: 1` | violations per km in `eval/summary.md` |
+| Cheap rules | `red_light: -1`, `stop_sign: -1` | violations per km in `eval/summary.md` |
 | Speed demon | `speed_bonus: 0.2` on | circles / speeding (4.3) |
-| Smooth operator | `comfort: 0.05` | smoother ride, or sitting still? |
-| School zones | `speed_tolerance_kmh: 0`, `speeding: 0.3` | "worst school-zone overspeed" |
+| Smooth operator | `comfort: -0.05` | smoother ride, or sitting still? |
+| School zones | `speed_tolerance_kmh: 0`, `speeding: -0.3` | "worst school-zone overspeed" |
 | Strict | `terminate_on_red_light: true` | fewer reds, but slower learning? |
 | Presets | `compare.py cautious aggressive` | the safety vs time trade-off |
 
-## 7. Reading the results honestly
+## 8. Reading the results honestly
 
 - **Return is not comparable between reward files**: a different reward means
   a different scale. Compare success rate and the metrics in

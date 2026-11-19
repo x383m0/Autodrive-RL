@@ -37,7 +37,7 @@ from .geometry import (obb_circle_overlap, obb_corners, obb_overlap_many, to_loc
                        wrap_angle)
 from .pedestrians import PedestrianManager
 from .rewards import TERMS, RewardComputer, load_reward_config
-from .sensors import N_RAYS, SensorSuite
+from .sensors import CLS_NONE, CLS_PED, CLS_VEHICLE, N_RAYS, SensorSuite
 from .traffic import TrafficManager
 from .vehicle import LENGTH, MAX_BRAKE, MAX_STEER, WIDTH, BicycleCar
 
@@ -177,11 +177,12 @@ class AutoDriveEnv(gym.Env):
         self.stop_min_speed = {}             # event index -> min speed near the line
         self.cw_flagged = set()
         self.light_seen = {}
-        self.ep = {k: 0.0 for k in TERMS}    # per-term episode sums
+        self.rewarder.reset()
+        self.ep = {k: 0.0 for k in self.rewarder.names}    # per-term episode sums
         self.stats = dict(red=0, stop=0, crosswalk=0, speeding_steps=0, offroad_steps=0,
                           stall_steps=0, lane_dev_sum=0.0, heading_change=0.0, comfort=0.0,
                           speed_sum=0.0, max_over=0.0, school_over=0.0)
-        self.last_terms = {k: 0.0 for k in TERMS}
+        self.last_terms = {k: 0.0 for k in self.rewarder.names}
         self.last_reward = 0.0
         self.ep_return = 0.0
         self.events = []
@@ -439,11 +440,34 @@ class AutoDriveEnv(gym.Env):
             self.events.append(("skid", car.pos.copy()))
 
         stuck = self.idle_steps > int(self.reward_cfg["settings"]["stuck_seconds"] / DT)
-        return dict(ds=ds, parked=parked, stuck=stuck, park_err=park_err, collision=coll, ped_hit=ped_hit,
+        meas = self._custom_measurements(lat, offroad, coll, ped_hit, parked, red_v, stop_v,
+                                         off_route, stuck) if self.rewarder.custom else None
+        return dict(meas=meas, ds=ds, parked=parked, stuck=stuck, park_err=park_err, collision=coll, ped_hit=ped_hit,
                     ped_close=ped_close, crosswalk_violation=cw_violation, speed=car.v,
                     limit=limit, red_violation=red_v, stop_violation=stop_v, lat=lat,
                     on_street=on_street, offroad_frac=offroad, jerk=jerk,
                     steer_rate=steer_rate, legit_wait=legit, off_route=off_route)
+
+    def _custom_measurements(self, lat, offroad, coll, ped_hit, parked, red_v, stop_v, off_route, stuck):
+        """Measurements for custom (rule-builder) rewards; see rewards.MEASUREMENTS.
+        Surroundings come from the car's SENSORS, not from ground truth."""
+        car, route, d, c = self.car, self.route, self.ray_dist, self.ray_cls
+
+        def nearest(mask):
+            return float(d[mask].min()) if mask.any() else 999.0
+        ahead = (self.sensors.cam_id <= 1) & (np.abs(self.sensors.local_ang) < 0.1) & (c != CLS_NONE)
+        return {
+            "speed_kmh": car.v * 3.6, "accel": car.a, "steering_pct": car.delta / MAX_STEER * 100.0,
+            "distance_m": car.odometer, "to_spot_m": max(route.length - self.s, 0.0), "time_s": self.t,
+            "lane_offset_m": abs(lat),
+            "heading_err_deg": abs(float(np.degrees(wrap_angle(car.theta - route.heading(self.s))))),
+            "off_road": offroad > 0.01, "in_lot": self.s >= route.in_lot_s,
+            "nearest_car_m": nearest(c == CLS_VEHICLE), "nearest_pedestrian_m": nearest(c == CLS_PED),
+            "obstacle_ahead_m": nearest(ahead),
+            "crashed": bool(coll), "hit_pedestrian": bool(ped_hit), "parked": bool(parked),
+            "ran_red_light": bool(red_v), "rolled_stop_sign": bool(stop_v),
+            "went_off_route": bool(off_route), "got_stuck": bool(stuck),
+        }
 
     def _observe(self):
         car = self.car

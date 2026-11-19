@@ -21,11 +21,18 @@ CPU only.
 python game.py          # then open http://localhost:8000
 ```
 
-Level by level you design the car's reward (switches and weights, no code),
-choose how long to train, watch it learn live, and a hidden test on new roads
-gives you points and stars. 1 star unlocks the next level. Levels 1-5 are
-playable now (park, straight road, bends, into town, rules of the road);
-levels 6-11 are coming (see `GAME_DESIGN.md`).
+Each level starts with an **empty reward**. Press **+ Add reward** to pick
+built-in rewards (each with a plain-English explanation, no suggested
+numbers) and type how many points each one gives - positive to encourage,
+negative to punish. Or **create your own rule** ("when speed > 30 km/h and a
+pedestrian is closer than 6 m, give -0.5 every step"); your rules are saved
+in a personal library for every level. Choose a training time, press Train,
+watch the car learn live (fullscreen button included), and a hidden test on
+12 new roads gives you points and stars. 1 star unlocks the next level.
+
+Levels 1-5 are playable now (park, straight road, bends, into town, rules of
+the road); levels 6-11 are coming (see `GAME_DESIGN.md`). Progress is saved
+in `games/`, your trained cars in `experiments/game/`.
 
 ## Quick start (without the game)
 

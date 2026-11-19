@@ -85,6 +85,7 @@ class Spectator:
         self.events = deque(maxlen=200)       # (id, dict) for /events
         self.event_id = 0
         self.paused = False
+        self.watchers = 0                     # open video streams; nobody watching = no rendering
         self.speed = 1.0
         self.request_new = False
         self.results = deque(maxlen=200)
@@ -109,7 +110,15 @@ class Spectator:
         found = self._policy_dir()
         if found is None:
             if force and self.allow_untrained:
-                # nothing trained yet: an untrained car just wobbles along
+                # nothing trained yet: an untrained car just wobbles along,
+                # scored with the player's own reward (never the defaults)
+                for f in ("reward_config.yaml", "my_reward.yaml"):
+                    if (self.exp / f).exists():
+                        self.reward_cfg = load_reward_config(self.exp / f, allow_empty=True)
+                        break
+                else:
+                    self.reward_cfg = load_reward_config(None)
+                    self.reward_cfg["terms"] = {k: dict(t, enabled=False) for k, t in self.reward_cfg["terms"].items()}
                 rng = np.random.default_rng(0)
                 self.policy = lambda obs: np.array([rng.normal(0, 0.3), rng.normal(-0.2, 0.4)])
                 self.policy_src = "untrained car (waiting for the first checkpoint)"
@@ -129,7 +138,7 @@ class Spectator:
             return False
         self.policy = policy
         cfg_path = self.exp / "reward_config.yaml"
-        self.reward_cfg = cfg or (load_reward_config(cfg_path) if cfg_path.exists() else None)
+        self.reward_cfg = cfg or (load_reward_config(cfg_path, allow_empty=True) if cfg_path.exists() else None)
         self.policy_mtime = mtime
         self.policy_src = f"{d.relative_to(ROOT) if d.is_relative_to(ROOT) else d}/model.zip"
         if not force:
@@ -200,6 +209,10 @@ class Spectator:
                 hold_until = None
                 self._new_episode()
             frame_dt = 1.0 / self.fps
+            if self.watchers <= 0:
+                # nobody is looking: don't burn CPU (training may be running)
+                time.sleep(0.2)
+                continue
             if self.paused:
                 self._show(r.draw(env, 1.0, 0.0), time.time() + frame_dt)
                 continue
@@ -448,12 +461,16 @@ def make_handler(sp: Spectator):
                     self.send_header("Cache-Control", "no-store")
                     self.end_headers()
                     last = -1
-                    while True:
-                        with sp.cond:
-                            sp.cond.wait_for(lambda: sp.frame_id != last, timeout=5)
-                            jpg, last = sp.jpeg, sp.frame_id
-                        self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
-                                         + str(len(jpg)).encode() + b"\r\n\r\n" + jpg + b"\r\n")
+                    sp.watchers += 1
+                    try:
+                        while True:
+                            with sp.cond:
+                                sp.cond.wait_for(lambda: sp.frame_id != last, timeout=5)
+                                jpg, last = sp.jpeg, sp.frame_id
+                            self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                                             + str(len(jpg)).encode() + b"\r\n\r\n" + jpg + b"\r\n")
+                    finally:
+                        sp.watchers -= 1
                 elif u.path == "/events":
                     self.send_response(200)
                     self.send_header("Content-Type", "text/event-stream")

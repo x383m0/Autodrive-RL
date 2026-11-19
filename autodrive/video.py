@@ -51,7 +51,7 @@ def load_policy(exp_dir, deterministic=True):
 
     from .rewards import load_reward_config
     cfg_path = exp_dir / "reward_config.yaml"
-    reward_cfg = load_reward_config(cfg_path) if cfg_path.exists() else None
+    reward_cfg = load_reward_config(cfg_path, allow_empty=True) if cfg_path.exists() else None
     return policy, reward_cfg
 
 

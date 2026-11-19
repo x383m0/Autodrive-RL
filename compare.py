@@ -82,9 +82,14 @@ def reward_diff(a, b):
     rows = []
     for k in TERMS:
         ta, tb = ca["terms"][k], cb["terms"][k]
-        va = f"{ta['weight']:g}" if ta["enabled"] and ta["weight"] > 0 else "off"
-        vb = f"{tb['weight']:g}" if tb["enabled"] and tb["weight"] > 0 else "off"
+        va = f"{ta['weight']:+g}" if ta["enabled"] and ta["weight"] != 0 else "off"
+        vb = f"{tb['weight']:+g}" if tb["enabled"] and tb["weight"] != 0 else "off"
         rows.append((k, va, vb, va != vb))
+    cust = {c["name"]: c for c in ca.get("custom", [])}, {c["name"]: c for c in cb.get("custom", [])}
+    for nm in sorted(set(cust[0]) | set(cust[1])):
+        fmt = lambda c: (f"{c['give']:+g}{' x ' + c['times'] if c['times'] else ''}" if c else "off")
+        va, vb = fmt(cust[0].get(nm)), fmt(cust[1].get(nm))
+        rows.append((f"custom: {nm}", va, vb, va != vb))
     srows = []
     for k in ca["settings"]:
         va, vb = ca["settings"][k], cb["settings"][k]

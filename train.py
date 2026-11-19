@@ -116,7 +116,7 @@ def main():
         STAGES = BY_ID[args.level]["curriculum"]
     else:
         STAGES = MAIN_STAGES
-    from autodrive.rewards import TERMS, RewardConfigError, describe_config, load_reward_config
+    from autodrive.rewards import RewardConfigError, all_names, describe_config, load_reward_config
 
     if args.quick:
         args.minutes = min(args.minutes, 2.0)
@@ -126,7 +126,7 @@ def main():
     if not args.resume:
         # check the reward file BEFORE creating anything, and name the user's file
         try:
-            load_reward_config(args.reward)
+            load_reward_config(args.reward, allow_empty=True)
         except RewardConfigError as e:
             msg = str(e)
             if "No reward terms are switched on" in msg:
@@ -150,11 +150,16 @@ def main():
         reward_path = out / "reward_config.yaml"
         shutil.copy(args.reward, reward_path)
     try:
-        reward_cfg = load_reward_config(reward_path)
+        reward_cfg = load_reward_config(reward_path, allow_empty=True)
     except RewardConfigError as e:
         print(f"\n[reward config problem] {e}\n")
         sys.exit(1)
     print(f"[train] rewards switched on in '{reward_cfg['name']}':\n{describe_config(reward_cfg)}")
+    from autodrive.rewards import active_names
+    if not active_names(reward_cfg):
+        print("[train] WARNING: no rewards are switched on - every step is worth 0 points, "
+              "so the car will learn nothing.\n         (Training the template? Copy it first: "
+              "cp rewards/template.yaml rewards/mine.yaml, then switch rewards on.)", flush=True)
     with open(out / "config.yaml", "w") as f:
         yaml.safe_dump({"reward_file": str(args.reward), "reward": reward_cfg,
                         "train_args": vars(args)}, f, sort_keys=False)
@@ -207,7 +212,7 @@ def main():
     ep_fields = ["timesteps", "wall_s", "stage", "success", "status", "return", "steps", "route_len",
                  "progress_frac", "mean_speed", "red_violations", "stop_violations",
                  "crosswalk_violations", "speeding_frac", "offroad_frac", "stall_frac",
-                 "lane_dev_mean", "turns_per_100m", "park_err", "city_seed"] + [f"r_{k}" for k in TERMS]
+                 "lane_dev_mean", "turns_per_100m", "park_err", "city_seed"] + [f"r_{k}" for k in all_names(reward_cfg)]
     ep_mode = "a" if args.resume and (out / "episodes.csv").exists() else "w"
     ep_file = open(out / "episodes.csv", ep_mode, newline="")
     ep_writer = csv.DictWriter(ep_file, fieldnames=ep_fields)

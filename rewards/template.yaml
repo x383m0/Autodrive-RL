@@ -4,24 +4,28 @@
 #  HOW TO USE (no coding needed):
 #    1. Copy this file, e.g. to  rewards/mine.yaml
 #    2. For each reward you want, change   enabled: false   to   enabled: true
-#       and put a number in   weight:   (bigger number = the car cares more).
+#       and put a number in   weight:   = the points the car gets when it happens.
+#       Positive = it gains points, negative = it loses points.
 #    3. Train:   python train.py --reward rewards/mine.yaml --name mine
 #
 #  Everything starts OFF. Only what you switch on counts - nothing else
 #  sneaks in. Training prints the list of switched-on rewards when it starts,
 #  so you can double-check.
 #
-#  [+] = a bonus (adds to the reward)    [-] = a penalty (subtracts)
-#  Always write positive numbers; the +/- is fixed for each reward.
+#  [+] = usually positive (a bonus)    [-] = usually negative (a penalty)
+#  The number is used exactly as you write it - nothing is flipped for you.
 #
 #  Layout rules: keep the spacing exactly as it is (spaces, not tabs).
 #  Lines starting with # are notes and are ignored.
 #
 #  Scale tip: the car drives about 1 metre every step. With progress at 0.1,
 #  a typical trip across town is worth about 30 points. Pick other numbers
-#  relative to that, e.g. a crash penalty of 50 = "as bad as losing 500 m".
+#  relative to that, e.g. a crash at -50 = "as bad as losing 500 m".
 #  The "suggested" numbers are what the balanced preset (rewards.yaml) uses.
+#
+#  Your own rules: add a "custom:" list at the end (see REWARD_GUIDE.md).
 # =============================================================================
+format: 2          # weights are signed points (see the header)
 name: my_reward
 description: Built from scratch.
 
@@ -44,83 +48,83 @@ terms:
     weight: 0
 
   # [-] Crashing into a car, parked car or building. Ends the trip.
-  #                                                          suggested: 50
+  #                                                          suggested: -50
   collision:
     enabled: false
     weight: 0
 
-  # [-] Hitting a pedestrian. Ends the trip.                 suggested: 100
+  # [-] Hitting a pedestrian. Ends the trip.                 suggested: -100
   pedestrian_hit:
     enabled: false
     weight: 0
 
   # [-] Driving fast close to a pedestrian (every step it happens).
-  #     Teaches "slow down near people".                     suggested: 0.1
+  #     Teaches "slow down near people".                     suggested: -0.1
   pedestrian_proximity:
     enabled: false
     weight: 0
 
   # [-] Driving over a crosswalk while someone is walking on it.
-  #                                                          suggested: 10
+  #                                                          suggested: -10
   crosswalk_yield:
     enabled: false
     weight: 0
 
   # [-] Going over the speed limit (every step, more for bigger excess).
-  #                                                          suggested: 0.05
+  #                                                          suggested: -0.05
   speeding:
     enabled: false
     weight: 0
 
-  # [-] Running a red light.                                 suggested: 20
+  # [-] Running a red light.                                 suggested: -20
   red_light:
     enabled: false
     weight: 0
 
-  # [-] Not stopping at a stop sign.                         suggested: 10
+  # [-] Not stopping at a stop sign.                         suggested: -10
   stop_sign:
     enabled: false
     weight: 0
 
   # [-] Drifting away from the middle of the lane / the planned path (every step).
-  #                                                          suggested: 0.03
+  #                                                          suggested: -0.03
   lane_deviation:
     enabled: false
     weight: 0
 
-  # [-] Wheels on the sidewalk or grass (every step).        suggested: 0.2
+  # [-] Wheels on the sidewalk or grass (every step).        suggested: -0.2
   off_road:
     enabled: false
     weight: 0
 
   # [-] Jerky driving: sudden braking/accelerating, fast steering.
-  #     Too big and the car becomes timid.                   suggested: 0.01
+  #     Too big and the car becomes timid.                   suggested: -0.01
   comfort:
     enabled: false
     weight: 0
 
   # [-] Standing still for no reason (no red light, stop sign, car or
   #     pedestrian in front). Stops the car from just parking on the road.
-  #                                                          suggested: 0.03
+  #                                                          suggested: -0.03
   stall:
     enabled: false
     weight: 0
 
   # [-] A small cost for every step, so the car doesn't dawdle.
-  #                                                          suggested: 0.005
+  #                                                          suggested: -0.005
   time:
     enabled: false
     weight: 0
 
   # [-] Wandering more than 6 m away from the route. Ends the trip.
-  #                                                          suggested: 20
+  #                                                          suggested: -20
   off_route:
     enabled: false
     weight: 0
 
   # [-] Standing still for 12 seconds for no reason. Ends the trip.
   #     Stops the car from "freezing" whenever it gets into trouble.
-  #                                                          suggested: 20
+  #                                                          suggested: -20
   stuck:
     enabled: false
     weight: 0
