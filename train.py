@@ -181,6 +181,12 @@ def main():
                     row[k] = round(float(row[k]), 4)
                 ep_writer.writerow(row)
             if tracker.should_advance():
+                # snapshot the model that just PASSED this stage (small files),
+                # so a later collapse never loses a good model
+                snap = out / "stages" / STAGES[tracker.stage]["name"].split()[0]
+                snap.mkdir(parents=True, exist_ok=True)
+                self.model.save(str(snap / "model.zip"))
+                self.training_env.save(str(snap / "vecnormalize.pkl"))
                 k = tracker.advance(ts)
                 self.training_env.env_method("set_stage", k)
                 # Re-inject exploration: on easy stages PPO's action noise

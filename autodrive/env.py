@@ -58,7 +58,7 @@ class AutoDriveEnv(gym.Env):
     metadata = {"render_modes": ["rgb_array"], "render_fps": 10}
 
     def __init__(self, reward_config=None, stage=0, frame_stack=4, render_mode=None,
-                 replay_prob=0.15, seed_range=(0, 10_000_000), audio_events=False):
+                 replay_prob=0.3, seed_range=(0, 10_000_000), audio_events=False):
         super().__init__()
         if reward_config is None or isinstance(reward_config, str):
             reward_config = load_reward_config(reward_config)
