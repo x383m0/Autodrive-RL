@@ -55,11 +55,19 @@ SCHOOL_LIMIT = 20 * KMH
 LOT_LIMIT = 15 * KMH
 
 # ---- parking lot ---------------------------------------------------------
-# Angled parking (60 degrees, leaning in the direction of travel), like many
-# supermarket lots: the car makes ONE smooth 60-degree turn out of the aisle
-# and then drives straight into the slot. (A 90-degree slot needed a swing
-# away + a hard turn back, which the agent failed to discover; see
-# REWARD_GUIDE.md.)
+# Lot layout: a straight aisle with angled (60 degree) slots along its sides
+# (parked cars = obstacles and scenery), ending in a ROW OF BAYS across the
+# end of the aisle. The target is always one of the end bays: the car drives
+# down the aisle, eases sideways with a gentle S-curve (up to two bays), and
+# pulls straight in, often between two parked cars.
+# Why not a side slot? We tried 90-degree and 60-degree side slots: the
+# agent learned to finish a turn it had started, but within the 45-minute
+# budget it never learned to start the turn precisely (and with no reverse
+# gear, a crooked approach can't be fixed). See REWARD_GUIDE.md, 4.4.
+END_BAYS = 3                      # end-row bays on each side of the aisle axis
+TARGET_BAYS = 2                   # targets are within +-2 bays of the aisle axis
+CURVE_LEN = 14.0                  # length of the S-curve towards the target bay
+BAY_STRAIGHT = 5.0                # straight run into the bay
 SLOT_W = 3.3                      # slot width, measured across the slot
 SLOT_D = 5.5                      # slot depth, along the slot axis
 SLOT_ANGLE = np.deg2rad(60)       # slot axis vs the aisle direction
@@ -334,8 +342,10 @@ class City:
         self.lot_aisle = (a0, a1 - 1.0)
         # slots on both sides of the aisle
         slots = []
+        r_b = a1 - SLOT_D / 2 - 0.5            # centre line of the end row of bays
+        self.lot_end_r = r_b
         rr = a0 + 6.0
-        while rr + SLOT_SPACING < a1 - 2.0:
+        while rr < r_b - 24.0:                # side slots stop before the S-curve apron
             for side in (-1, 1):   # -1 => on the right when driving along r
                 n_ = d * side
                 axis = np.cos(SLOT_ANGLE) * r + np.sin(SLOT_ANGLE) * n_   # nose direction when parked
@@ -343,32 +353,26 @@ class City:
                 slots.append({"center": c, "side": side, "r": rr, "axis": axis,
                               "heading": float(np.arctan2(axis[1], axis[0]))})
             rr += SLOT_SPACING
+        ang_r = float(np.arctan2(r[1], r[0]))
+        for j in range(-END_BAYS, END_BAYS + 1):
+            c = m + r * r_b + d * (j * SLOT_W)
+            slots.append({"center": c, "side": 0, "r": r_b, "axis": r.copy(), "heading": ang_r,
+                          "end": True, "j": j})
         self.slots = slots
         self.slot_occupied = np.array([rng.random() < occupancy for _ in slots])
         self.target_slot = None
 
     def choose_target_slot(self, rng, between_cars=False):
-        """Pick an empty slot (optionally one with both neighbours occupied)."""
-        n = len(self.slots)
-        cands = []
-        for i in range(n):
-            if between_cars:
-                same = [j for j in range(n) if self.slots[j]["side"] == self.slots[i]["side"]
-                        and abs(self.slots[j]["r"] - self.slots[i]["r"]) < SLOT_SPACING * 1.5 and j != i]
-                if len(same) == 2:
-                    cands.append(i)
-            else:
-                cands.append(i)
-        # avoid the first two rows near the entrance so there is a bit of aisle
-        cands = [i for i in cands if self.slots[i]["r"] > self.lot_aisle[0] + 14] or cands
-        i = int(rng.choice(cands))
+        """Pick an empty end-row bay (optionally with both neighbours occupied)."""
+        ends = {sl["j"]: i for i, sl in enumerate(self.slots) if sl.get("end")}
+        j = int(rng.integers(-TARGET_BAYS, TARGET_BAYS + 1))
+        i = ends[j]
         self.target_slot = i
         self.slot_occupied[i] = False
         if between_cars:
-            for j in range(n):
-                if (self.slots[j]["side"] == self.slots[i]["side"]
-                        and abs(self.slots[j]["r"] - self.slots[i]["r"]) < SLOT_SPACING * 1.5 and j != i):
-                    self.slot_occupied[j] = True
+            for jj in (j - 1, j + 1):
+                if jj in ends:
+                    self.slot_occupied[ends[jj]] = True
         self._static_boxes = None
         return i
 
@@ -386,13 +390,24 @@ class City:
         for side in (-1, 1):
             c = m + r * ((r_lo + r_hi) / 2) + d * side * ((AISLE_HW + SLOT_ROW_HI) / 2)
             rects.append([c[0], c[1], (r_hi - r_lo) / 2, (SLOT_ROW_HI - AISLE_HW) / 2, ang])
+        # apron in front of the end row + the end row itself
+        e0, e1, hw = self._end_area()
+        c = m + r * ((e0 + e1) / 2)
+        rects.append([c[0], c[1], (e1 - e0) / 2, hw, ang])
         return np.array(rects)
 
+    def _end_area(self):
+        """(start, end along the aisle, half width) of apron + end-row bays."""
+        r_b = self.lot_end_r
+        return (r_b - SLOT_D / 2 - CURVE_LEN - 2.0, r_b + SLOT_D / 2, (END_BAYS + 0.5) * SLOT_W)
+
     def _slot_row_extent(self):
-        """Along-aisle extent of the (angled) slot rows."""
+        """Along-aisle extent of the (angled) side slot rows."""
+        side = [s_ for s_ in self.slots if not s_.get("end")]
         reach = SLOT_D / 2 * np.cos(SLOT_ANGLE) + SLOT_W / 2 / np.sin(SLOT_ANGLE)
-        return (min(s["r"] for s in self.slots) - reach - 1.0,
-                max(s["r"] for s in self.slots) + reach)
+        if not side:
+            return (0.0, 0.0)
+        return (min(s_["r"] for s_ in side) - reach - 1.0, max(s_["r"] for s_ in side) + reach)
 
     # ------------------------------------------------------------- blocks
     def _build_blocks(self):
@@ -449,7 +464,10 @@ class City:
         if ROAD_HW - margin <= a <= a1 + margin and abs(b) <= AISLE_HW + margin:
             return True
         r_lo, r_hi = self._slot_row_extent()
-        return (r_lo - margin <= a <= r_hi + margin) and abs(b) <= SLOT_ROW_HI + margin
+        if (r_lo - margin <= a <= r_hi + margin) and abs(b) <= SLOT_ROW_HI + margin:
+            return True
+        e0, e1, hw = self._end_area()
+        return (e0 - margin <= a <= e1 + margin) and abs(b) <= hw + margin
 
     # ------------------------------------------------------------- parked
     def _build_parked(self, prob):
@@ -740,29 +758,23 @@ class City:
             pts1.append(c1 + R1 * (np.cos(phi) * d + np.sin(phi) * r) * 1.0)
         # c1 + R1*(cos(-90) d + sin(-90) r) = c1 - R1 r = p0  OK; end = c1 + R1 d
         p_end1 = pts1[-1]
-        # straight down the aisle centre line, ONE arc of SLOT_ANGLE towards
-        # the slot side, then straight along the slot axis to the slot centre
-        R2 = SLOT_TURN_R
-        side = sl["side"]
-        n_ = d * side
-        a2 = sl["r"] - R2 * np.sin(SLOT_ANGLE) - SLOT_STRAIGHT * np.cos(SLOT_ANGLE)
+        # straight down the aisle, a gentle S-curve sideways to the target bay
+        # (smoothstep lateral shift), then straight into the bay
+        y_t = sl["j"] * SLOT_W
+        a_bay = sl["r"]
+        a_s = a_bay - BAY_STRAIGHT - CURVE_LEN
         aisle_pts = []
         a_start = float((p_end1 - m) @ r)
-        for a in np.arange(a_start + 0.5, a2, 0.5):
+        for a in np.arange(a_start + 0.5, a_s, 0.5):
             aisle_pts.append(m + r * a)
-        p2 = m + r * a2
-        c2 = p2 + n_ * R2
         arc2 = []
-        for k in range(n + 1):
-            phi = SLOT_ANGLE * k / n
-            arc2.append(c2 - n_ * R2 * np.cos(phi) + r * R2 * np.sin(phi))
-        p_end2 = arc2[-1]
+        for a in np.arange(a_s, a_s + CURVE_LEN, 0.5):
+            u = (a - a_s) / CURVE_LEN
+            arc2.append(m + r * a + d * y_t * (u * u * (3 - 2 * u)))
         tail_pts = []
-        end = sl["center"]
-        L = np.linalg.norm(end - p_end2)
-        for t in np.arange(0.5, L + 1e-6, 0.5):
-            tail_pts.append(p_end2 + (end - p_end2) * min(t / L, 1.0))
-        tail_pts.append(end)
+        for a in np.arange(a_s + CURVE_LEN, a_bay, 0.5):
+            tail_pts.append(m + r * a + d * y_t)
+        tail_pts.append(sl["center"])
         return [(pts1, LOT_LIMIT), (aisle_pts, LOT_LIMIT), (arc2, LOT_LIMIT * 0.8),
                 (tail_pts, LOT_LIMIT * 0.6)]
 

@@ -27,12 +27,11 @@ from collections import deque
 # minutes. See REWARD_GUIDE.md, "sparse rewards".)
 _PARK = dict(grid=(3, 3), hops=(0, 0), controls=False, n_cars=0, n_peds=0, parked=0.0,
              n_kids=0, jaywalk=0.0, school=0.0, lot_occ=0.3, hard_brake=0.0, advance=0.60)
-# Each lesson uses a NARROW band of start distances, so it cannot be passed
-# with the easy starts of the previous lesson: the start creeps backwards
-# through the turn into the slot ~3 m at a time. (With wide bands like 1-16 m
-# the agent passed by parking only from the near starts and never learned
-# the turn: measured 0/38 successes from 15-25 m.)
-_BANDS = [(1, 6), (4, 9), (7, 12), (10, 15), (13, 19), (17, 25), (22, 45)]
+# Each lesson uses a band of start distances that overlaps the previous one
+# only a little, so it cannot be passed with the easy starts alone. (With
+# wide bands like 1-16 m the agent passed by parking from the near starts
+# only, and never learned the hard part.)
+_BANDS = [(1, 6), (4, 15), (12, 30), (25, 70)]
 STAGES = [dict(_PARK, name=f"P{i + 1} park from {lo}-{hi} m", start_togo=(float(lo), float(hi)))
           for i, (lo, hi) in enumerate(_BANDS)] + [
     dict(name="S1 empty streets", grid=(3, 3), hops=(0, 1), controls=False, n_cars=0,
