@@ -24,7 +24,7 @@ pip install -r requirements.txt
 # 2-minute smoke test (checks that everything runs)
 python train.py --reward rewards.yaml --name smoke --quick
 
-# real training run (40 minutes on a 4-core CPU)
+# real training run (45 minutes on a 4-core CPU)
 python train.py --reward rewards.yaml --name balanced
 
 # test it on 100 cities it has never seen (+ failure videos)
@@ -92,7 +92,7 @@ in `autodrive/rewards.py`.
 | Sensors | `autodrive/sensors.py` | 5 cameras (front wide / narrow-long / left / right / rear) + 12-beam ultrasonic ring, real occlusion; last 4 frames stacked |
 | Environment | `autodrive/env.py` | Gymnasium env: observation, rule checks, termination |
 | Rewards | `autodrive/rewards.py` | the configurable reward, per-term breakdown |
-| Curriculum | `autodrive/curriculum.py` | 11 stages that advance automatically (parking lessons, then streets, rules, traffic, pedestrians, full city) |
+| Curriculum | `autodrive/curriculum.py` | 10 stages that advance automatically: 4 parking lessons (reverse curriculum), empty streets, traffic rules, light traffic, traffic, pedestrians, full city |
 | Render / sound / video | `autodrive/render.py`, `audio.py`, `video.py` | top-down pygame view with FOV cones and HUD; soundtrack mixed offline; mp4 export |
 
 Sound is never played live (training is silent and the code runs headless);
@@ -107,4 +107,17 @@ shapes/sounds.
 
 ## Results
 
-See `RESULTS.md` for the measured numbers of the shipped models.
+Short version: the car learns to drive to the lot and park (37% of unseen
+cities with lights and stop signs) within the 45-minute budget, but it does
+**not** learn to handle traffic and pedestrians in that time (5% success in
+the full city). See `RESULTS.md` for all measured numbers, the comparison of
+two reward presets, and what went wrong along the way.
+
+Shipped, ready to watch or evaluate:
+
+```bash
+python evaluate.py experiments/balanced_45min --n 100
+python compare.py balanced_45min cautious
+```
+
+Videos: `experiments/balanced_45min/videos/` and `.../eval/failures/`.

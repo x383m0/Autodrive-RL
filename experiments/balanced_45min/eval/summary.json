@@ -1,0 +1,37 @@
+{
+ "episodes": 100,
+ "success_rate": 0.05,
+ "success_ci95": [
+  0.02154336145631356,
+  0.11175196527208817
+ ],
+ "clean_success_rate": 0.0,
+ "collision_rate": 0.54,
+ "pedestrian_hit_rate": 0.37,
+ "off_route_rate": 0.03,
+ "stuck_rate": 0.01,
+ "timeout_rate": 0.0,
+ "km_driven": 13.841778784519887,
+ "red_lights_per_km": 2.817556948938969,
+ "stop_signs_per_km": 7.44124014719779,
+ "crosswalk_violations_per_km": 2.3840866491022044,
+ "speeding_time_frac": 0.06553982325238389,
+ "school_zone_max_over_kmh": 15.79282374720557,
+ "mean_speed_kmh": 18.235118284274865,
+ "lane_offset_mean_m": 0.7927323340997898,
+ "offroad_time_frac": 0.007600202603786552,
+ "route_completion_mean": 0.4323426881501588,
+ "parking_error_mean": 0.4720927011265932,
+ "time_to_park_s_mean": 67.22000000000028,
+ "mean_return": -80.88972675438093,
+ "outcomes": {
+  "collision": 54,
+  "pedestrian_hit": 37,
+  "off_route": 3,
+  "parked": 5,
+  "stuck": 1
+ },
+ "stage": 9,
+ "stage_name": "S6 full city",
+ "eval_seconds": 78.9
+}

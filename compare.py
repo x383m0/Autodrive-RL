@@ -105,6 +105,12 @@ def verdict(sa, sb, na, nb):
         lines.append(f"- **{better}** is better at *{label.lower()}* ({fmt(va, kind)} vs {fmt(vb, kind)}).")
     if not lines:
         lines.append("- The two cars perform about the same on every metric.")
+    ca, cb = sa.get("route_completion_mean", 0), sb.get("route_completion_mean", 0)
+    if abs(ca - cb) > 0.2:
+        shorter = na if ca < cb else nb
+        lines.append(f"- Careful: **{shorter}** completes much less of its routes ({100*min(ca, cb):.0f}% vs "
+                     f"{100*max(ca, cb):.0f}%), so its episodes end early. Lower crash or violation "
+                     f"*rates* can simply mean it drove less, not that it drove better.")
     # honesty about sample size
     lo_a, hi_a = sa["success_ci95"]
     lo_b, hi_b = sb["success_ci95"]

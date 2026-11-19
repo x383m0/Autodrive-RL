@@ -1,0 +1,135 @@
+# Results
+
+All numbers below were measured in this repository on a 4-core CPU
+(no GPU), Python 3.13, ~1,450 environment steps per second with 8 parallel
+environments. Evaluation always uses cities the car has never seen (seeds
+from 50,000,000; training draws seeds below 10,000,000) and a deterministic
+policy.
+
+## Summary
+
+| | Honest verdict |
+|---|---|
+| Simulator, sensors, rewards, curriculum, renderer, sound, videos, evaluation, comparison | **Work.** Tested end to end. |
+| Learning to **park** (reverse curriculum, 4 lessons) | **Works**: all 4 parking lessons pass in ~3 minutes of training. |
+| Learning to **drive a route through empty streets and park** | **Works, roughly**: stage passed (70% success during training). |
+| Learning **traffic lights + stop signs** | **Partly**: 37% of unseen cities parked, but ~2 red lights and ~4 rolled stop signs per km. |
+| Learning **traffic and pedestrians** (the full city) | **Not achieved within the 45-minute budget**: 5% success in the full city. |
+
+So: it's a real, working RL driving sandbox, and the shipped car really does
+learn to drive to the lot and park, but it is **not** a competent city driver.
+The full curriculum (traffic + pedestrians) did not train successfully in
+45 minutes, and longer training made things worse (see below).
+
+## Shipped model: `experiments/balanced_45min`
+
+`python train.py --reward rewards.yaml --name balanced` (45 minutes, 3.9M steps).
+
+Curriculum timeline (stage reached at step):
+
+| Stage | Reached at |
+|---|---|
+| P1 park from 1-6 m | 0 |
+| P2 park from 4-15 m | 52,568 |
+| P3 park from 12-30 m | 82,680 |
+| P4 park from 25-70 m | 126,568 |
+| S1 empty streets | 210,272 |
+| S2 traffic rules | 2,055,272 (~22 min) |
+| S3 light traffic | not reached (S2 success hovered 25-50%, needs 65%) |
+
+### Evaluation on 100 unseen cities at the level it trained for (S2: lights + stop signs, no other cars/people)
+
+`experiments/balanced_45min/eval_traffic_rules/summary.md`
+
+| Metric | Value |
+|---|---|
+| Parked successfully | **37%** (95% CI 28-47%) |
+| Parked with zero rule violations | 4% |
+| Collision (mostly parked cars / lot) | 31% |
+| Left the route | 23% |
+| Stuck | 9% |
+| Average route completed | 95% |
+| Red lights run per km | 2.16 |
+| Stop signs rolled per km | 3.88 |
+| Time spent speeding | 10.8% |
+| Average speed | 15.0 km/h |
+| Parking error (0 = perfect) | 0.38 |
+| Time to park | 47.8 s |
+
+### Evaluation on 100 unseen FULL cities (traffic, pedestrians, kids, school zones)
+
+`experiments/balanced_45min/eval/summary.md`
+
+| Metric | Value |
+|---|---|
+| Parked successfully | **5%** (95% CI 2-11%) |
+| Collision | 54% |
+| Pedestrian hit | 37% |
+| Average route completed | 43% |
+| Red lights / stop signs rolled per km | 2.82 / 7.44 |
+| Crosswalk violations per km | 2.38 |
+
+It has never trained with other cars or pedestrians, and it shows.
+
+### Videos (mp4 with sound)
+
+- `experiments/balanced_45min/videos/demo_traffic_rules_1_seed50000097.mp4` and `_2_seed50000073.mp4`:
+  successful drives + parks with no red-light/stop-sign violations (picked from the
+  37% that succeeded, so they show the best case)
+- `experiments/balanced_45min/videos/demo_full_city_1_seed50000003.mp4`: the full city
+  (ends in a pedestrian hit)
+- `experiments/balanced_45min/eval/failures/`: collision, pedestrian hit, off route
+
+## Comparison: `balanced` vs `cautious` (both 45 minutes)
+
+`experiments/compare/balanced_45min_vs_cautious/report.md` (+ `curves.png`,
+`metrics.png`, `side_by_side.mp4`).
+
+The cautious preset (2-4x larger safety penalties, zero speed tolerance) did
+**not** get out of the parking lessons: it stalled in "P4 park from 25-70 m"
+at ~10-20% success. In the full city it parked 0%, left the route 63% of the
+time, and completed 13% of routes on average. Its lower collision and
+pedestrian-hit *rates* (25% / 12% vs 54% / 37%) are an artefact of driving
+much less, which the report now points out automatically. Lesson: big
+penalties early in training make learning harder (REWARD_GUIDE 4.2).
+
+## What longer training did
+
+Continuing the shipped run with `--resume` for another 45 minutes (90 minutes,
+7.7M steps total) made it **worse**: S2 success fell from ~40% to ~3%, and
+the replayed earlier stages collapsed too (parking ~13%). Two earlier runs
+showed the same collapse in the traffic stage. I did not ship that model. I
+tried re-injecting exploration noise and a gentler first traffic stage; these
+did not fix it. It looks like a PPO stability problem on long multi-stage
+runs (constant learning rate, reward normalisation drifting between stages)
+rather than a single reward bug, and it is the main open issue.
+
+## What it took to get here (all measured, details in REWARD_GUIDE.md)
+
+| Attempt | Result | Fix |
+|---|---|---|
+| raw pedal action | car stood still 70% of the time | target-speed action (cruise controller) |
+| comfort = jerk/10 | "don't touch the controls" | comfort normalised to 0-1 |
+| first full 40-min run | parked **0 times in 3.7M steps** | reverse curriculum (start next to the slot) |
+| overshooting the slot was free | stopped early or overshot | progress counts past-the-slot as backwards |
+| wide start bands (1-16 m) | passed lessons on easy starts only | narrow, overlapping bands |
+| 90 deg / 60 deg side slots | stalled at 30-45% after 45 min | end-of-aisle bays (passed in ~3 min) |
+| lane_deviation off in the lot | under-steered into the bay | path-following penalty everywhere |
+| stuck = timeout | "freeze when in trouble", S2 regressed 24% -> 0% | `stuck` term ends the episode |
+| action noise collapsed to 0.05 | could not learn traffic | noise re-injected for new actors (did not suffice) |
+
+## Assets
+
+Real (downloaded, CC0 Kenney): all car/pedestrian/tree/skid sprites; engine,
+crash (metal + glass), pedestrian thud, turn-signal tick, light-change ping,
+parking chime, wind. Synthesised (`tools/make_sounds.py`): horn, brake squeal,
+city ambience. kenney.nl, Freesound, Pixabay, Mixkit and OpenGameArt were
+blocked by the network; the Kenney packs came from a GitHub mirror.
+
+## Not done
+
+- `SPEC.md` was not in the repository; everything was built from the summary
+  in the request.
+- The reward-hacking detector, the `broken_on_purpose` preset and the scripted
+  scenario test suite were deferred at your request.
+- Turning into side slots was replaced by end-of-aisle bays (see above).

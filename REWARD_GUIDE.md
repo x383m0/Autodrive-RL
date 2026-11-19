@@ -163,6 +163,25 @@ rewards. If the future is very negative (e.g. a huge time penalty), dying
 early can look *good*. Keep per-step penalties small enough that a normal
 drive still has a positive total.
 
+### 4.9 Bigger penalties are not "safer" (the cautious preset)
+
+`rewards/cautious.yaml` multiplies every safety penalty by 2-4. Trained for
+the same 45 minutes as `balanced`, it never got out of the parking lessons
+(balanced reached the traffic-rules stage). Early in training every attempt
+is clumsy, so huge penalties mostly teach "trying is expensive". In the full
+city it "crashed less" only because it gave up early: compare crash rates
+together with how much of the route was completed.
+
+### 4.10 Not every failure is the reward's fault
+
+Training the shipped car longer (90 instead of 45 minutes) made it worse,
+across all stages. That is an optimisation problem (PPO instability on a
+long multi-stage run), not a reward design problem. If a run gets steadily
+worse while the reward has not changed, suspect the learning setup: action
+noise collapsing (we saw it fall to 0.05), learning rate, reward
+normalisation drifting between curriculum stages. Per-stage model snapshots
+(`experiments/<name>/stages/`) let you keep the best model anyway.
+
 ## 5. A recipe for building a reward from scratch
 
 1. Start with `progress` + `goal_reached` + `collision`. Train with `--quick`

@@ -1,0 +1,80 @@
+reward_file: rewards.yaml
+reward:
+  terms:
+    progress:
+      enabled: true
+      weight: 0.1
+    goal_reached:
+      enabled: true
+      weight: 30.0
+    parking_precision:
+      enabled: true
+      weight: 15.0
+    collision:
+      enabled: true
+      weight: 50.0
+    pedestrian_hit:
+      enabled: true
+      weight: 100.0
+    pedestrian_proximity:
+      enabled: true
+      weight: 0.1
+    crosswalk_yield:
+      enabled: true
+      weight: 10.0
+    speeding:
+      enabled: true
+      weight: 0.05
+    red_light:
+      enabled: true
+      weight: 20.0
+    stop_sign:
+      enabled: true
+      weight: 10.0
+    lane_deviation:
+      enabled: true
+      weight: 0.03
+    off_road:
+      enabled: true
+      weight: 0.2
+    comfort:
+      enabled: true
+      weight: 0.01
+    stall:
+      enabled: true
+      weight: 0.03
+    time:
+      enabled: true
+      weight: 0.005
+    off_route:
+      enabled: true
+      weight: 20.0
+    stuck:
+      enabled: true
+      weight: 20.0
+    speed_bonus:
+      enabled: false
+      weight: 0.02
+  settings:
+    speed_tolerance_kmh: 3.0
+    lane_deadband_m: 0.4
+    ped_proximity_radius_m: 4.0
+    stall_speed_ms: 0.5
+    off_route_distance_m: 6.0
+    stuck_seconds: 12.0
+    terminate_on_red_light: false
+    terminate_on_stop_sign: false
+  name: balanced
+  description: Sensible defaults - drives at the limit, obeys rules, parks cleanly.
+train_args:
+  reward: rewards.yaml
+  name: balanced
+  minutes: 45.0
+  steps: 20000000
+  n_envs: 8
+  seed: 0
+  quick: false
+  resume: false
+  start_stage: 0
+  no_video: true
+  video_episodes: 2
