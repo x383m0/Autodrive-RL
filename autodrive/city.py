@@ -55,9 +55,9 @@ SCHOOL_LIMIT = 20 * KMH
 LOT_LIMIT = 15 * KMH
 
 # ---- parking lot ---------------------------------------------------------
-SLOT_W = 3.0      # width of one parking slot (along the aisle)
+SLOT_W = 3.3      # width of one parking slot (along the aisle)
 SLOT_D = 5.5      # depth of one slot
-AISLE_HW = 3.5    # half width of the lot aisle
+AISLE_HW = 4.0    # half width of the lot aisle
 
 # ---- traffic light timing -------------------------------------------------
 YELLOW_T = 3.0
@@ -189,6 +189,12 @@ class Path:
         k = int(np.argmin(d2))
         i = lo + k
         s = self.s[i] + t[k] * np.sqrt(L2[k])
+        if i == len(self.pts) - 2:
+            # beyond the END of the path: keep counting (s > length) so callers
+            # can tell "past the goal" apart from "at the goal"
+            raw = float(((p - a[k]) * ab[k]).sum() / L2[k])
+            if raw > 1.0:
+                s = self.length + (raw - 1.0) * np.sqrt(L2[k])
         tang = ab[k] / np.sqrt(L2[k])
         rel = p - proj[k]
         lat = -tang[1] * rel[0] + tang[0] * rel[1]     # dot(rel, right_of(tang))
@@ -720,7 +726,7 @@ class City:
         # straight along the aisle to the start of arc 2. Like a human driver we
         # first swing wide (away from the slot side) so the turn ends early and
         # there is a few metres of straight line to settle into the slot.
-        R2 = 4.5
+        R2 = 5.0
         side = sl["side"]
         swing = 1.8
         a_end = sl["r"] - R2

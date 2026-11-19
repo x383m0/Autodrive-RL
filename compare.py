@@ -158,7 +158,9 @@ def plots(a, b, sa, sb, out):
         for bar, v in zip(bars, (va, vb)):
             ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), fmt(v, kind), ha="center",
                     va="bottom", fontsize=8, color="#0b0b0b")
-        ax.margins(y=0.25)
+        top = max(va * scale, vb * scale)
+        ax.set_ylim(0, top * 1.3 if top > 0 else (5 if kind == "pct" else 1))
+        ax.set_axisbelow(True)
         ax.grid(axis="x", visible=False)
     for j in range(len(keys), rows_n * cols_n):
         axes[j // cols_n][j % cols_n].axis("off")

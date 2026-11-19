@@ -14,20 +14,34 @@ from __future__ import annotations
 
 from collections import deque
 
-STAGES = [
-    dict(name="S0 empty streets", grid=(3, 3), hops=(0, 1), controls=False, n_cars=0,
-         n_peds=0, parked=0.0, n_kids=0, jaywalk=0.0, school=0.0, lot_occ=0.25,
+# start_togo: if set, the car starts already on its route only this many
+# metres (min, max) before the parking slot.
+#
+# The first lessons are a REVERSE CURRICULUM for parking: the car starts just
+# in front of its slot, then a bit further back each lesson (6 m, 9 m, 12 m,
+# 16 m, 25 m, 45 m), until it starts at the lot entrance. Why: an agent that
+# has never once parked successfully cannot learn what parking is worth, and
+# the 90-degree turn into a slot between parked cars is too hard to discover
+# by random exploration from far away. (We measured it: from 2-40 m the agent
+# parked <5% of the time after 8 minutes; from 1-6 m it parked 100% after 2.5
+# minutes. See REWARD_GUIDE.md, "sparse rewards".)
+_PARK = dict(grid=(3, 3), hops=(0, 0), controls=False, n_cars=0, n_peds=0, parked=0.0,
+             n_kids=0, jaywalk=0.0, school=0.0, lot_occ=0.3, hard_brake=0.0, advance=0.70)
+STAGES = [dict(_PARK, name=f"P{i + 1} park from {d} m", start_togo=(1.0, float(d)))
+          for i, d in enumerate((6, 9, 12, 16, 25, 45))] + [
+    dict(name="S1 empty streets", grid=(3, 3), hops=(0, 1), controls=False, n_cars=0,
+         n_peds=0, parked=0.0, n_kids=0, jaywalk=0.0, school=0.0, lot_occ=0.3,
          hard_brake=0.0, advance=0.70),
-    dict(name="S1 traffic rules", grid=(3, 3), hops=(1, 3), controls=True, n_cars=0,
+    dict(name="S2 traffic rules", grid=(3, 3), hops=(1, 3), controls=True, n_cars=0,
          n_peds=0, parked=0.25, n_kids=0, jaywalk=0.0, school=0.15, lot_occ=0.4,
          hard_brake=0.0, advance=0.65),
-    dict(name="S2 traffic", grid=(4, 4), hops=(1, 4), controls=True, n_cars=8,
+    dict(name="S3 traffic", grid=(4, 4), hops=(1, 4), controls=True, n_cars=8,
          n_peds=0, parked=0.3, n_kids=0, jaywalk=0.0, school=0.15, lot_occ=0.5,
          hard_brake=0.5, advance=0.60),
-    dict(name="S3 pedestrians", grid=(4, 4), hops=(1, 4), controls=True, n_cars=8,
+    dict(name="S4 pedestrians", grid=(4, 4), hops=(1, 4), controls=True, n_cars=8,
          n_peds=14, parked=0.4, n_kids=1, jaywalk=0.15, school=0.15, lot_occ=0.6,
          hard_brake=1.0, advance=0.60),
-    dict(name="S4 full city", grid=(4, 4), hops=(2, 6), controls=True, n_cars=10,
+    dict(name="S5 full city", grid=(4, 4), hops=(2, 6), controls=True, n_cars=10,
          n_peds=18, parked=0.5, n_kids=2, jaywalk=0.2, school=0.2, lot_occ=0.7,
          hard_brake=1.0, advance=1.01),   # final stage never "advances"
 ]

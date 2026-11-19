@@ -18,10 +18,13 @@ smaller the circle.
    v'       = a
 
 Controls coming from the policy are NORMALISED to [-1, 1]:
-   steer_cmd  ->  target steering angle = steer_cmd * MAX_STEER
-                  (the wheel moves towards it at a limited rate, like a real rack)
-   speed_cmd  ->  TARGET SPEED = (speed_cmd + 1) / 2 * CMD_MAX_SPEED
-                  -1 = "stop", 0 = 8 m/s (29 km/h), +1 = 16 m/s (58 km/h).
+   steer_cmd  ->  target steering angle = sign(c) * c^2 * MAX_STEER
+                  (squared: fine control for small lane corrections, full lock
+                  still available; the wheel moves at a limited rate)
+   speed_cmd  ->  TARGET SPEED = ((speed_cmd + 1) / 2)^2 * CMD_MAX_SPEED
+                  -1 = "stop", 0 = 4 m/s, 0.5 = 9 m/s, +1 = 16 m/s (58 km/h).
+                  Squared so the slow speeds needed for parking get half of the
+                  command range (precise creeping), not a tiny sliver of it.
                   A cruise controller turns it into acceleration:
                       a = clip(K_SPEED * (target - v), -MAX_BRAKE, MAX_ACCEL)
                   (no reverse gear: v >= 0)
@@ -79,8 +82,8 @@ class BicycleCar:
     def step(self, steer_cmd: float, speed_cmd: float, dt: float, substeps: int = 2):
         steer_cmd = float(np.clip(steer_cmd, -1, 1))
         speed_cmd = float(np.clip(speed_cmd, -1, 1))
-        target = steer_cmd * MAX_STEER
-        self.target_speed = (speed_cmd + 1.0) / 2.0 * CMD_MAX_SPEED
+        target = np.sign(steer_cmd) * steer_cmd ** 2 * MAX_STEER
+        self.target_speed = ((speed_cmd + 1.0) / 2.0) ** 2 * CMD_MAX_SPEED
         acc = K_SPEED * (self.target_speed - self.v)
         if speed_cmd <= -0.98:
             acc = -MAX_BRAKE                      # "stop now": full brakes

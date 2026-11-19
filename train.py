@@ -132,7 +132,7 @@ def main():
             n_steps=512, batch_size=512, n_epochs=6, learning_rate=3e-4,
             gamma=0.99, gae_lambda=0.95, clip_range=0.2, ent_coef=0.002,
             vf_coef=0.5, max_grad_norm=0.5,
-            policy_kwargs=dict(net_arch=dict(pi=[256, 256], vf=[256, 256]), log_std_init=-0.6),
+            policy_kwargs=dict(net_arch=dict(pi=[256, 256], vf=[256, 256]), log_std_init=-1.0),
             verbose=0)
 
     # ---- logging callback -------------------------------------------------------

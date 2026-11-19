@@ -16,6 +16,7 @@ def expert_action(env):
     loc = to_local(tgt[None], car.pos, car.theta)[0]
     curv = 2 * loc[1] / max(loc @ loc, 1e-6)
     steer = np.clip(np.arctan(WHEELBASE * curv) / MAX_STEER, -1, 1)
+    steer = np.sign(steer) * np.sqrt(abs(steer))          # invert the squared steering map
     # target speed
     v_t = route.limit(env.s + 3) * 0.95
     # curvature ahead
@@ -45,7 +46,7 @@ def expert_action(env):
         d = env.ray_dist[m].min() - 3.0
         v_t = min(v_t, np.sqrt(2 * 3.0 * max(d, 0)))
     # the action is a target speed: -1 = stop ... +1 = 16 m/s
-    cmd = np.clip(v_t / 16.0 * 2 - 1, -1, 1)
+    cmd = np.clip(np.sqrt(max(v_t, 0) / 16.0) * 2 - 1, -1, 1)   # invert the squared speed map
     if v_t < 0.1:
         cmd = -1.0
     return np.array([steer, cmd])

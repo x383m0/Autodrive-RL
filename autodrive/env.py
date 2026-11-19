@@ -44,10 +44,11 @@ from .vehicle import LENGTH, MAX_BRAKE, MAX_STEER, WIDTH, BicycleCar
 DT = 0.1
 WP_OFFSETS = np.array([2, 4, 6, 8, 11, 14, 18, 23, 30, 40], dtype=float)
 FRAME_DIM = N_RAYS * 4 + 6 + 5 + 21 + 3 + 7 + 5
-PARK_LAT_TOL = 0.6
-PARK_LON_TOL = 1.0
-PARK_HEAD_TOL = np.deg2rad(15)
+PARK_LAT_TOL = 0.75
+PARK_LON_TOL = 1.3
+PARK_HEAD_TOL = np.deg2rad(20)
 PARK_SPEED = 0.3
+STATS_SPEED_TOL = 3.0 / 3.6     # m/s, for metrics only (not rewards)
 
 
 class AutoDriveEnv(gym.Env):
@@ -122,9 +123,17 @@ class AutoDriveEnv(gym.Env):
         self.route, self.start_edge = self.city.build_route(rng, *p["hops"],
                                                             start_edge=start_edge,
                                                             start_s=start_s)
-        p0 = self.route.pts[0]
-        th = float(self.route.headings[0])
-        v0 = float(p.get("v0", rng.uniform(0, 0.6) * self.route.limit(0.0)))
+        # The posted speed tapers to walking pace in the last metres before the
+        # slot (like creeping into a parking space): v <= 0.3 + sqrt(2 * 0.8 * d).
+        togo = self.route.length - self.route.s
+        self.route.limits = np.minimum(self.route.limits, 0.3 + np.sqrt(2 * 0.8 * np.maximum(togo, 0)))
+        s0 = 0.0
+        if p.get("start_togo"):
+            # reverse curriculum: start part-way along the route, near the goal
+            s0 = max(0.0, self.route.length - float(rng.uniform(*p["start_togo"])))
+        p0 = self.route.pos(s0)
+        th = float(self.route.heading(s0 + 0.5))
+        v0 = float(p.get("v0", rng.uniform(0, 0.6) * self.route.limit(s0)))
         self.car = BicycleCar(p0[0], p0[1], th, v0)
         self.traffic = TrafficManager(self.city, rng, p["n_cars"], hard_brake_scale=p["hard_brake"])
         self.peds = PedestrianManager(self.city, rng, p["n_peds"], jaywalk_prob=p["jaywalk"],
@@ -139,10 +148,11 @@ class AutoDriveEnv(gym.Env):
         self.t = 0.0
         self.steps = 0
         self.route_idx = 0
-        self.s, self.lat, self.route_idx = self.route.project(self.car.pos, 0)
+        hint = int(np.searchsorted(self.route.s, self.route.s[-1] - 60)) if self.params.get("start_togo") else 0
+        self.s, self.lat, self.route_idx = self.route.project(self.car.pos, max(hint, 0), window=400)
         self.best_s = self.s
-        self.last_progress_step = 0
-        self.max_steps = int((self.route.length / 4.0 + 40.0) / DT)
+        self.idle_steps = 0
+        self.max_steps = int(((self.route.length - self.s) / 4.0 + 40.0) / DT)
         self.last_action = np.zeros(2)
         self.prev_delta = 0.0
         self.ev_done = set()                 # processed control events
@@ -201,7 +211,7 @@ class AutoDriveEnv(gym.Env):
             terminated = True
         if m["stop_violation"] and st["terminate_on_stop_sign"]:
             terminated = True
-        stuck = (self.steps - self.last_progress_step) > int(30 / DT)
+        stuck = self.idle_steps > int(12 / DT)
         truncated = (not terminated) and (self.steps >= self.max_steps or stuck)
         if m["parked"]:
             self.status = "parked"
@@ -281,12 +291,20 @@ class AutoDriveEnv(gym.Env):
         city = self.city
         route = self.route
         s_old = self.s
-        s_new, lat, idx = route.project(car.pos, self.route_idx)
+        s_raw, lat, idx = route.project(car.pos, self.route_idx)
+        # Progress means "getting closer to the goal along the route": driving
+        # PAST the end of the route (overshooting the parking slot) counts as
+        # going backwards. So the best place to be is exactly at the slot.
+        s_new = s_raw if s_raw <= route.length else route.length - (s_raw - route.length)
         ds = float(np.clip(s_new - s_old, -2.0, 2.0))
         self.s, self.lat, self.route_idx = s_new, lat, idx
+        # "stuck" clock: only runs while we make no progress WITHOUT a good
+        # reason (waiting at a red light or behind a car is fine)
         if s_new > self.best_s + 1.0:
             self.best_s = s_new
-            self.last_progress_step = self.steps
+            self.idle_steps = 0
+        elif not legit:
+            self.idle_steps += 1
 
         self._scan()
         box = car.box
@@ -375,12 +393,15 @@ class AutoDriveEnv(gym.Env):
         steer_rate = abs(car.delta - prev_delta) / DT
         on_street = s_new < route.in_lot_s
         off_route = abs(lat) > self.reward_cfg["settings"]["off_route_distance_m"]
+        if s_raw > route.length + 3.0:          # drove clean through the parking slot
+            off_route = True
 
         # --- stats for the reward-hacking detector ----------------------------
         st = self.stats
-        tol = self.reward_cfg["settings"]["speed_tolerance_kmh"] / 3.6
+        # stats use ONE fixed standard (3 km/h tolerance), independent of the
+        # reward config, so different experiments are measured the same way
         over = car.v - limit
-        if over > tol:
+        if over > STATS_SPEED_TOL:
             st["speeding_steps"] += 1
         st["max_over"] = max(st["max_over"], over)
         if route.school[min(idx, len(route.school) - 1)]:

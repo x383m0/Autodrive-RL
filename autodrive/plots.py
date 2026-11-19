@@ -70,7 +70,9 @@ def _stage_bands(ax, steps, stages):
     for k in range(len(starts) - 1):
         a, b = steps[starts[k]], steps[starts[k + 1] - 1]
         ax.axvspan(a, b, color=STAGE_BANDS[k % 2], zorder=0, lw=0)
-        ax.text((a + b) / 2, 1.0, f"S{stages[starts[k]]}", transform=ax.get_xaxis_transform(),
+        from .curriculum import STAGES
+        label = STAGES[stages[starts[k]]]["name"].split()[0] if stages[starts[k]] < len(STAGES) else "?"
+        ax.text((a + b) / 2, 1.0, label, transform=ax.get_xaxis_transform(),
                 ha="center", va="bottom", fontsize=8, color=INK2)
 
 
