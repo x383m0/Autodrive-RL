@@ -338,6 +338,9 @@ class Renderer:
             for b in city.adj[a]:
                 d = city.edge_dir(a, b)
                 pos = city.nodes[a] + d * (STOPLINE_D + 6) + right_of(d) * (ROAD_HW + 1.2)
+                # game levels have no speed limits except school zones: no signs then
+                if env.params.get("no_limits") and not city.is_school(a, b):
+                    continue
                 self._limit_sign(S, pos, city.edge_limit(a, b) * 3.6, city.is_school(a, b))
         return S
 
@@ -363,15 +366,18 @@ class Renderer:
                 j = i + step
                 quad = [c[i] + nrm[i] * off0, c[j] + nrm[j] * off0, c[j] + nrm[j] * off1, c[i] + nrm[i] * off1]
                 pygame.draw.polygon(S, color, [ps(q) for q in quad])
-        strip(-ROAD_HALF - 0.6, ROAD_HALF + 0.6, C["curb"])          # gravel shoulder
+        if not city.pad_only:
+            strip(-ROAD_HALF - 0.6, ROAD_HALF + 0.6, C["curb"])      # gravel shoulder
         for rect in city.lot_polys():                                 # parking pad
+            pygame.draw.polygon(S, C["curb"], [ps(q) for q in obb_corners(rect + np.array([0, 0, 0.6, 0.6, 0]))])
             pygame.draw.polygon(S, C["lot"], [ps(q) for q in obb_corners(rect)])
-        strip(-ROAD_HALF, ROAD_HALF, C["asphalt"])
-        # markings: solid white edges, dashed yellow centre line
-        for off in (-ROAD_HALF + 0.3, ROAD_HALF - 0.3):
-            pygame.draw.lines(S, (220, 220, 214), False, [ps(q) for q in c[::4] + nrm[::4] * off], 2)
-        for i in range(0, len(c) - 6, 12):
-            pygame.draw.line(S, C["yellow"], ps(c[i]), ps(c[i + 6]), 2)
+        if not city.pad_only:
+            strip(-ROAD_HALF, ROAD_HALF, C["asphalt"])
+            # markings: solid white edges, dashed yellow centre line
+            for off in (-ROAD_HALF + 0.3, ROAD_HALF - 0.3):
+                pygame.draw.lines(S, (220, 220, 214), False, [ps(q) for q in c[::4] + nrm[::4] * off], 2)
+            for i in range(0, len(c) - 6, 12):
+                pygame.draw.line(S, C["yellow"], ps(c[i]), ps(c[i + 6]), 2)
         # bays
         for sl in city.slots:
             ax = sl["axis"]
@@ -409,8 +415,20 @@ class Renderer:
         start = ps(env.car.pos)
         pygame.draw.circle(S, (255, 255, 255), start, 16)
         pygame.draw.circle(S, C["accent"], start, 16, 5)
+        if getattr(env.city, "kind", "city") == "road":
+            # single road / parking pad: crop to the route and the pad
+            pts = np.concatenate([env.route.pts] + [obb_corners(r) for r in env.city.lot_polys()])
+            lo, hi = pts.min(0) - 10.0, pts.max(0) + 10.0
+            span = max(hi[0] - lo[0], (hi[1] - lo[1]) * 1.3)    # keep a pleasant ~4:3 frame
+            mid = (lo + hi) / 2
+            lo, hi = mid - np.array([span / 2, span / 2.6]), mid + np.array([span / 2, span / 2.6])
+            (x0, y0), (x1, y1) = ps(lo), ps(hi)
+            W0, H0 = S.get_size()
+            x0, y0 = max(0, x0), max(0, y0)
+            rect = pygame.Rect(x0, y0, min(x1, W0) - x0, min(y1, H0) - y0)
+            S = S.subsurface(rect).copy()
         w, h = S.get_size()
-        k = min(max_w / w, max_h / h, 1.0)
+        k = min(max_w / w, max_h / h)
         S = pygame.transform.smoothscale(S, (int(w * k), int(h * k)))
         return np.frombuffer(pygame.image.tobytes(S, "RGB"), np.uint8).reshape(S.get_height(), S.get_width(), 3)
 

@@ -10,7 +10,7 @@ reward terms.
 
 | # | Level | World | Score |
 |---|---|---|---|
-| 1 | Park here | Parking lot, start a few metres from the spot | parking precision |
+| 1 | Park here | Just a parking pad on grass (no streets), start a few metres from the spot | parking precision |
 | 2 | Straight road | A single empty straight road, parking spot at the end | speed |
 | 3 | Bends | A single empty road with turns, spot at the end | speed |
 | 4 | Into town | City streets with buildings and parked cars, no controls | speed |
@@ -49,9 +49,12 @@ for passing score thresholds; 1 star unlocks the next level.
   "x measurement" amount, paid every step or each time it becomes true;
   saved in a personal library (live link). Details:
   `.plans/reward-workshop-redesign-spec.md`.
-- The live view appears once you train in a level (before that: "Map & rules"
-  shows a map preview and the scoring); it has a fullscreen mode with
-  progress, controls and the results popup.
+- Before the first training of a level, a map of the level is shown next to
+  the workshop (no button); after that, the live view takes its place. The
+  live view has a fullscreen mode with progress, controls and the results popup.
+- The level card shows the goal in large text and three SVG stars with the
+  points each needs; stars turn gold when earned.
+- Maps show no speed-limit signs (game rule: no limits except school zones).
 
 ## Training
 

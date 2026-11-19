@@ -3,6 +3,8 @@ worlds.py - simple worlds for the first game levels.
 
 RoadWorld: a single empty two-lane road across open grass, ending in a row
 of parking bays. Level 2 uses a straight road, level 3 a road with bends.
+With pad_only=True there is no road at all, just the parking pad on grass
+(level 1, "Park here").
 There are no intersections, buildings, traffic or pedestrians.
 
 It offers the same interface the environment and renderer use from City
@@ -26,13 +28,20 @@ PAD_LIMIT = 15 / 3.6              # creeping speed on the parking pad
 class RoadWorld:
     kind = "road"
 
-    def __init__(self, rng, length=(160, 240), bends=0, lot_occupancy=0.3):
+    def __init__(self, rng, length=(160, 240), bends=0, lot_occupancy=0.3, pad_only=False):
         self.rng = rng
         self.bends = bends
-        for _ in range(50):
-            center = self._centerline(rng, length, bends)
-            if self._ok(center):
-                break
+        self.pad_only = pad_only
+        # pad_only: the pad reaches this far back, covering the short entry line
+        self.pad_back = 4.0 if pad_only else 0.0
+        if pad_only:
+            h = rng.uniform(0, 2 * np.pi)
+            center = np.arange(0, 3.5, 0.5)[:, None] * np.array([np.cos(h), np.sin(h)])[None]
+        else:
+            for _ in range(50):
+                center = self._centerline(rng, length, bends)
+                if self._ok(center):
+                    break
         # shift so everything is inside [MARGIN, ...] like the city
         lo = center.min(0) - (ROAD_HALF + 30)
         center = center - lo
@@ -128,14 +137,14 @@ class RoadWorld:
     def point_in_pad(self, p, margin=0.0):
         rel = np.asarray(p) - self.end
         a, b = rel @ self.f, rel @ self.r
-        return (-margin <= a <= self.pad_bay_along + SLOT_D / 2 + margin
+        return (-margin - self.pad_back <= a <= self.pad_bay_along + SLOT_D / 2 + margin
                 and abs(b) <= (END_BAYS + 0.5) * SLOT_W + margin)
 
     def lot_polys(self):
         f = self.f
         ang = float(np.arctan2(f[1], f[0]))
-        L = self.pad_bay_along + SLOT_D / 2
-        c = self.end + f * (L / 2)
+        L = self.pad_bay_along + SLOT_D / 2 + self.pad_back
+        c = self.end + f * (L / 2 - self.pad_back)
         return np.array([[c[0], c[1], L / 2, (END_BAYS + 0.5) * SLOT_W, ang]])
 
     def choose_target_slot(self, rng, between_cars=False):
@@ -164,7 +173,7 @@ class RoadWorld:
     # ------------------------------------------------------------ queries
     def drivable(self, pts):
         pts = np.atleast_2d(pts)
-        on = self._dist_to_center(pts) <= ROAD_HALF
+        on = (self._dist_to_center(pts) <= ROAD_HALF) if not self.pad_only else np.zeros(len(pts), bool)
         for k in np.where(~on)[0]:
             on[k] = self.point_in_pad(pts[k])
         return on

@@ -125,6 +125,7 @@ class AutoDriveEnv(gym.Env):
         elif p.get("world") == "road":
             from .worlds import RoadWorld          # single empty road (game levels 2-3)
             self.city = RoadWorld(rng, length=p.get("road_len", (160, 240)), bends=p.get("bends", 0),
+                                  pad_only=bool(p.get("pad_only")),
                                   lot_occupancy=p["lot_occ"])
         else:
             nx, ny = p["grid"]

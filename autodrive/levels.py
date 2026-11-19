@@ -42,6 +42,7 @@ def _park_lessons(bands, advance=0.6):
 
 
 _ROAD = dict(world="road", lot_occ=0.3)
+_PAD = dict(world="road", pad_only=True, lot_occ=0.4)      # level 1: just a parking pad
 
 TERMS_1 = ["progress", "goal_reached", "parking_precision", "collision", "off_route", "stall",
            "stuck", "time", "speed_bonus"]
@@ -54,8 +55,9 @@ LEVELS = [
          brief="The parking spot is a few metres away. Teach the car to stop inside it - "
                "the straighter and more centred, the more points.",
          terms=TERMS_1, stars=(600, 750, 880),
-         curriculum=_park_lessons([(1, 6), (4, 15)]),
-         test=_stage("Park here (test)", hops=(0, 0), start_togo=(6.0, 20.0))),
+         curriculum=[_stage("park from 1-6 m", start_togo=(1.0, 6.0), advance=0.6, **_PAD),
+                     _stage("park from 4-15 m", start_togo=(4.0, 15.0), advance=0.6, **_PAD)],
+         test=_stage("Park here (test)", start_togo=(6.0, 20.0), **_PAD)),
     dict(id=2, name="Straight road", available=True, score="speed", minutes=4,
          brief="An empty straight road with a parking bay at the end. No speed limit: "
                "the faster it parks, the more points. Don't overshoot!",

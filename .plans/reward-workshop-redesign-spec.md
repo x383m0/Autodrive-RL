@@ -135,7 +135,7 @@ custom:
 
 ## 4. Live view
 
-### 4.1 Visibility
+### 4.1 Visibility  (updated: map shown directly, no "Map & rules" button)
 - Before the **first training of the level has started** (this session or
   earlier: any attempt on record), the live view is **not shown**. The
   workshop uses the **full width**.
