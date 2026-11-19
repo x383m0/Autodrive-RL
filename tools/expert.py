@@ -44,7 +44,8 @@ def expert_action(env):
     if m.any():
         d = env.ray_dist[m].min() - 3.0
         v_t = min(v_t, np.sqrt(2 * 3.0 * max(d, 0)))
-    acc = np.clip((v_t - car.v) * 1.0, -1, 1)
+    # the action is a target speed: -1 = stop ... +1 = 16 m/s
+    cmd = np.clip(v_t / 16.0 * 2 - 1, -1, 1)
     if v_t < 0.1:
-        acc = -1.0
-    return np.array([steer, acc])
+        cmd = -1.0
+    return np.array([steer, cmd])

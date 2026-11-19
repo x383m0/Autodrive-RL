@@ -20,8 +20,19 @@ smaller the circle.
 Controls coming from the policy are NORMALISED to [-1, 1]:
    steer_cmd  ->  target steering angle = steer_cmd * MAX_STEER
                   (the wheel moves towards it at a limited rate, like a real rack)
-   accel_cmd  >  0 : throttle, up to MAX_ACCEL
-              <  0 : brake,    up to MAX_BRAKE (no reverse gear: v >= 0)
+   speed_cmd  ->  TARGET SPEED = (speed_cmd + 1) / 2 * CMD_MAX_SPEED
+                  -1 = "stop", 0 = 8 m/s (29 km/h), +1 = 16 m/s (58 km/h).
+                  A cruise controller turns it into acceleration:
+                      a = clip(K_SPEED * (target - v), -MAX_BRAKE, MAX_ACCEL)
+                  (no reverse gear: v >= 0)
+
+Why a target speed and not a raw pedal? This is how real self-driving stacks
+split the work (the planner picks a speed, a low-level controller tracks it),
+and it matters a lot for learning: with a raw pedal, the random exploration
+noise of a fresh policy averages out to BRAKING (the brake is stronger than
+the engine), so the car mostly stands still and learns nothing. With a speed
+target, a fresh policy rolls along at a moderate speed and keeping a steady
+speed is simply a steady action.
 """
 from __future__ import annotations
 
@@ -39,6 +50,8 @@ STEER_RATE = np.deg2rad(120)      # rad/s the steering wheel can turn
 MAX_ACCEL = 3.5                   # m/s^2
 MAX_BRAKE = 8.0                   # m/s^2 (emergency stop)
 MAX_SPEED = 20.0                  # m/s (72 km/h)
+CMD_MAX_SPEED = 16.0              # m/s: speed_cmd = +1 asks for this
+K_SPEED = 2.0                     # cruise controller gain (1/s)
 DRAG = 0.02                       # gentle rolling resistance when coasting
 
 
@@ -51,6 +64,7 @@ class BicycleCar:
         self.yaw_rate = 0.0
         self.lat_acc = 0.0
         self.braking = False
+        self.target_speed = v
         self.odometer = 0.0
 
     @property
@@ -62,16 +76,16 @@ class BicycleCar:
         """OBB row [cx, cy, half_len, half_wid, angle] for collision/rays."""
         return np.array([self.x, self.y, LENGTH / 2, WIDTH / 2, self.theta])
 
-    def step(self, steer_cmd: float, accel_cmd: float, dt: float, substeps: int = 2):
+    def step(self, steer_cmd: float, speed_cmd: float, dt: float, substeps: int = 2):
         steer_cmd = float(np.clip(steer_cmd, -1, 1))
-        accel_cmd = float(np.clip(accel_cmd, -1, 1))
+        speed_cmd = float(np.clip(speed_cmd, -1, 1))
         target = steer_cmd * MAX_STEER
-        if accel_cmd >= 0:
-            acc = accel_cmd * MAX_ACCEL * (1.0 - self.v / (MAX_SPEED * 1.05))  # engine fades near top speed
-            self.braking = False
-        else:
-            acc = accel_cmd * MAX_BRAKE
-            self.braking = accel_cmd < -0.05
+        self.target_speed = (speed_cmd + 1.0) / 2.0 * CMD_MAX_SPEED
+        acc = K_SPEED * (self.target_speed - self.v)
+        if speed_cmd <= -0.98:
+            acc = -MAX_BRAKE                      # "stop now": full brakes
+        acc = float(np.clip(acc, -MAX_BRAKE, MAX_ACCEL * (1.0 - self.v / (MAX_SPEED * 1.05))))
+        self.braking = acc < -1.0
         acc -= DRAG * self.v
         self.prev_a = self.a
         h = dt / substeps

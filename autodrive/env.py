@@ -20,7 +20,8 @@ OBSERVATION (what the policy sees; see sensors.py) - one frame is:
   and the env returns the last 4 frames stacked (4 x 323 = 1292 floats), so a
   plain MLP can infer motion (who is moving where, how fast).
 
-ACTION: Box(2): steer in [-1,1] (+ = right), accel in [-1,1] (+ throttle / - brake).
+ACTION: Box(2): steer in [-1,1] (+ = right), target speed in [-1,1]
+        (-1 = stop, +1 = 16 m/s; a cruise controller tracks it, see vehicle.py).
 """
 from __future__ import annotations
 
@@ -390,9 +391,9 @@ class AutoDriveEnv(gym.Env):
             st["stall_steps"] += 1
         st["lane_dev_sum"] += abs(lat) if on_street else 0.0
         st["heading_change"] += abs(wrap_angle(car.theta - prev_theta))
-        st["comfort"] += abs(jerk) / 10 + steer_rate
+        st["comfort"] += min(abs(jerk) / 115.0, 1) + min(steer_rate / 2.094, 1)
         st["speed_sum"] += car.v
-        if car.braking and car.v > 4 and self.last_action[1] < -0.6:
+        if car.v > 4 and car.a < -5.0:
             self.events.append(("skid", car.pos.copy()))
 
         return dict(ds=ds, parked=parked, park_err=park_err, collision=coll, ped_hit=ped_hit,

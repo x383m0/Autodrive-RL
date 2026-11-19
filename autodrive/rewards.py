@@ -23,6 +23,11 @@ from pathlib import Path
 
 import yaml
 
+# Normalisers for the comfort term (see vehicle.py): the largest possible
+# change of acceleration in one 0.1 s step, and the steering rack speed.
+MAX_JERK = (3.5 + 8.0) / 0.1          # m/s^3
+MAX_STEER_RATE = 2.094                # rad/s (120 deg/s)
+
 # name: (sign, kind, short description)
 #   kind "step"  = paid every step proportional to a signal
 #   kind "event" = paid once when something happens
@@ -39,7 +44,7 @@ TERMS = {
     "stop_sign":            (-1, "event", "rolled through a stop sign without stopping"),
     "lane_deviation":       (-1, "step",  "metres away from the lane centre (beyond deadband)"),
     "off_road":             (-1, "step",  "any wheel on the sidewalk / off the asphalt"),
-    "comfort":              (-1, "step",  "jerk + fast steering (passenger comfort)"),
+    "comfort":              (-1, "step",  "jerk + fast steering, each scaled 0..1"),
     "stall":                (-1, "step",  "standing still with no reason to"),
     "time":                 (-1, "step",  "flat cost per step (hurry up)"),
     "off_route":            (-1, "event", "left the route by > off_route_distance (episode ends)"),
@@ -187,7 +192,9 @@ class RewardComputer:
         sig["stop_sign"] = float(m["stop_violation"])
         sig["lane_deviation"] = max(0.0, abs(m["lat"]) - st["lane_deadband_m"]) if m["on_street"] else 0.0
         sig["off_road"] = m["offroad_frac"]
-        sig["comfort"] = abs(m["jerk"]) / 10.0 + abs(m["steer_rate"])
+        # both parts normalised to [0, 1]: full-throttle -> full-brake in one step
+        # is jerk 1.0, the steering wheel at its maximum turning speed is 1.0
+        sig["comfort"] = min(abs(m["jerk"]) / MAX_JERK, 1.0) + min(abs(m["steer_rate"]) / MAX_STEER_RATE, 1.0)
         sig["stall"] = float(m["speed"] < st["stall_speed_ms"] and not m["legit_wait"])
         sig["time"] = 1.0
         sig["off_route"] = float(m["off_route"])
