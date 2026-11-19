@@ -26,7 +26,7 @@ from collections import deque
 # parked <5% of the time after 8 minutes; from 1-6 m it parked 100% after 2.5
 # minutes. See REWARD_GUIDE.md, "sparse rewards".)
 _PARK = dict(grid=(3, 3), hops=(0, 0), controls=False, n_cars=0, n_peds=0, parked=0.0,
-             n_kids=0, jaywalk=0.0, school=0.0, lot_occ=0.3, hard_brake=0.0, advance=0.70)
+             n_kids=0, jaywalk=0.0, school=0.0, lot_occ=0.3, hard_brake=0.0, advance=0.60)
 STAGES = [dict(_PARK, name=f"P{i + 1} park from {d} m", start_togo=(1.0, float(d)))
           for i, d in enumerate((6, 9, 12, 16, 25, 45))] + [
     dict(name="S1 empty streets", grid=(3, 3), hops=(0, 1), controls=False, n_cars=0,

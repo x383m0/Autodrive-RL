@@ -55,9 +55,9 @@ SCHOOL_LIMIT = 20 * KMH
 LOT_LIMIT = 15 * KMH
 
 # ---- parking lot ---------------------------------------------------------
-SLOT_W = 3.3      # width of one parking slot (along the aisle)
+SLOT_W = 3.6      # width of one parking slot (generous, along the aisle)
 SLOT_D = 5.5      # depth of one slot
-AISLE_HW = 4.0    # half width of the lot aisle
+AISLE_HW = 5.0    # half width of the lot aisle (wide: gentle turns into slots)
 
 # ---- traffic light timing -------------------------------------------------
 YELLOW_T = 3.0
@@ -726,9 +726,9 @@ class City:
         # straight along the aisle to the start of arc 2. Like a human driver we
         # first swing wide (away from the slot side) so the turn ends early and
         # there is a few metres of straight line to settle into the slot.
-        R2 = 5.0
+        R2 = 6.5
         side = sl["side"]
-        swing = 1.8
+        swing = 2.5
         a_end = sl["r"] - R2
         aisle_pts = []
         a_start = float((p_end1 - m) @ r)

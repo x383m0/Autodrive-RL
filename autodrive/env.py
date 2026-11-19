@@ -269,8 +269,6 @@ class AutoDriveEnv(gym.Env):
                     return True
             elif ev["kind"] == "stop" and -1.0 < dist < 12:
                 return True
-        if self.route.length - self.s < 2.0:
-            return True
         # something in the way ahead (car, pedestrian)?
         ahead = self.route.pos(self.s + np.arange(2.0, 16.0, 1.5))
         objs = []
