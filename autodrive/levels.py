@@ -74,7 +74,7 @@ LEVELS = [
                      _stage("medium road", road_len=(40, 90), **_ROAD),
                      _stage("full road", **_ROAD)],
          test=_stage("Straight road (test)", **_ROAD)),
-    dict(id=3, name="Bends", available=True, score="speed", minutes=6,
+    dict(id=3, name="Bends", available=True, score="speed", minutes=10,
          brief="Same idea, but the road bends. Fast on the straights, careful in the turns.",
          terms=TERMS_2, stars=(550, 700, 850),
          curriculum=[_stage("short straight road", road_len=(2, 12), **_ROAD),

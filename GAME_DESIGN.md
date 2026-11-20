@@ -90,8 +90,13 @@ entry in `autodrive/levels.py`:
 
 - The player chooses the training time.
 - `python game.py --debug` unlocks every built level (for testing); progress is still saved.
-- Single-road levels (2-3): the "start near the spot" practice stages always
-  start on the road a few metres before the pad, facing it.
+- Single-road levels (2-3): every practice drive starts at the beginning of
+  the road and drives all of it; the curriculum only makes the road longer
+  (level 2: short -> medium -> full; level 3: short straight -> medium with
+  1 bend -> full with 2 bends). Measured with the balanced reward: level 2
+  reaches the full road in ~4.5 min and parks ~87% of practice drives by
+  8 min; level 3 reaches the full road at ~6.5 min and parks ~77% by 12 min.
+  Default training times: 8 and 10 min.
 - The level's curriculum runs automatically behind the scenes (e.g. starting
   close to the spot first); the player only designs the reward.
 - Optional: start from your best car of the previous level.
