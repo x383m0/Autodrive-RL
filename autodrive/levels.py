@@ -81,7 +81,7 @@ LEVELS = [
                      _stage("medium road, 1 bend", road_len=(30, 70), bends=1, **_ROAD),
                      _stage("full road, 2 bends", bends=2, **_ROAD)],
          test=_stage("Bends (test)", bends=3, **_ROAD)),
-    dict(id=4, name="Into town", available=True, score="speed", minutes=10,
+    dict(id=4, name="Into town", available=True, score="speed", minutes=14,
          brief="Real streets now: buildings, parked cars and turns at intersections, "
                "then into a parking lot. Still no speed limits.",
          terms=TERMS_2, stars=(550, 700, 850),
