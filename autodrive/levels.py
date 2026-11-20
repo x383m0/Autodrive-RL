@@ -102,7 +102,8 @@ LEVELS = [
          test=_stage("Rules of the road (test)", hops=(1, 3), controls=True, parked=0.3, school=0.2)),
     dict(id=6, name="Rush hour", available=True, score="speed", rules=True, minutes=25,
          brief="Other cars and people on the sidewalks and crosswalks. Everyone behaves - "
-               "no reckless drivers, no jaywalkers - but a crash or a hit pedestrian ends the drive.",
+               "no reckless drivers, no jaywalkers - but a crash or a hit pedestrian ends the drive. "
+               "Tip: start from your best car of level 5.",
          terms=TERMS_6, stars=(450, 600, 750),
          curriculum=_park_lessons([(1, 6), (4, 15), (12, 30), (25, 70)])
          + [_stage("empty streets", hops=(0, 1), parked=0.3),

@@ -340,7 +340,10 @@ function startOptions() {
 function renderStartFrom() {
   const sel = $('startFrom'), keep = sel.value, o = startOptions();
   sel.innerHTML = o.map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join('');
-  sel.value = o.some(x => x[0] === keep) ? keep : 'new';
+  // from level 6 on (traffic), the previous level's car is the recommended start
+  const dflt = LV().id >= 6 && o.some(x => x[0] === 'prev') ? 'prev' : 'new';
+  sel.value = o.some(x => x[0] === keep) && sel.dataset.level === String(LV().id) ? keep : dflt;
+  sel.dataset.level = String(LV().id);
   $('fromWrap').hidden = o.length < 2;
   updateTrainLabel();
 }
