@@ -25,6 +25,7 @@ import argparse
 import csv
 import io
 import json
+import shutil
 import subprocess
 import sys
 import threading
@@ -187,6 +188,8 @@ class Game:
         old = self.sp
         sp = Spectator(Path(exp), stage, follow, self.quality, int(time.time()) % 10_000, self.fps,
                        stages=stages, allow_untrained=True)
+        if old is not None:                  # keep the player's zoom across runs
+            sp.zoom = sp.env.renderer.set_zoom(old.zoom)
         threading.Thread(target=sp.run, daemon=True).start()
         self.sp = sp
         if old is not None:
@@ -279,8 +282,19 @@ class Game:
         return "ok"
 
     def stop(self):
-        if self.proc and self.proc.poll() is None:
-            self.proc.terminate()          # train.py saves the car and exits
+        proc, run = self.proc, self.run_dir
+        if not (proc and proc.poll() is None and run):
+            return
+        # ask train.py to stop through a file: it finishes the current update,
+        # saves the car and exits (proc.terminate() kills it at once on Windows)
+        (run / "STOP").write_text("stop")
+
+        def hard_stop():                   # last resort if it does not exit in time
+            try:
+                proc.wait(timeout=90)
+            except subprocess.TimeoutExpired:
+                proc.terminate()
+        threading.Thread(target=hard_stop, daemon=True).start()
 
     def _watch_training(self, lv, run):
         for line in self.proc.stdout:
@@ -288,6 +302,13 @@ class Game:
             if line.startswith(("[", "===")) and "rewards switched on" not in line:
                 self.log_tail = (self.log_tail + [line.strip("= ")])[-12:]
         self.proc.wait()
+        (run / "STOP").unlink(missing_ok=True)
+        ck = run / "checkpoints"
+        if not (run / "model.zip").exists() and (ck / "model.zip").exists() and (ck / "vecnormalize.pkl").exists():
+            # killed before the final save: test the last checkpoint instead
+            shutil.copy(ck / "model.zip", run / "model.zip")
+            shutil.copy(ck / "vecnormalize.pkl", run / "vecnormalize.pkl")
+            self.log_tail = (self.log_tail + ["stopped early - using the last saved checkpoint"])[-12:]
         if not (run / "model.zip").exists():
             self.phase = "done"
             self.result = {"error": "Training failed - see the log.", "log": self.log_tail}
@@ -503,7 +524,7 @@ def main():
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--fps", type=int, default=30)
-    ap.add_argument("--quality", type=int, default=80)
+    ap.add_argument("--quality", type=int, default=90)
     args = ap.parse_args()
     RUNS.mkdir(parents=True, exist_ok=True)
     game = Game(args.fps, args.quality)

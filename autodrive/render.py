@@ -43,15 +43,17 @@ from .vehicle import LENGTH, WIDTH
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
 W, H = 1280, 720
-PPM = 9.0                      # pixels per metre
+PPM = 9.0                      # pixels per metre at zoom 1
+MAX_STATIC_PX = 4096           # largest pre-rendered city image (memory); beyond this, zoom scales
 MARGIN = 30.0                  # metres of scenery around the city
 
 # ---- palette (one cohesive, slightly desaturated look) ---------------------
 C = dict(
-    grass=(104, 150, 86), grass2=(96, 141, 80), sidewalk=(196, 194, 186), curb=(160, 158, 150),
-    asphalt=(66, 69, 74), asphalt2=(60, 63, 68), lot=(78, 81, 86), line=(236, 236, 230),
-    yellow=(242, 196, 56), school=(118, 104, 62), roof=[(170, 120, 96), (126, 138, 150),
-    (186, 170, 140), (142, 110, 120), (110, 128, 120), (200, 196, 186)],
+    # deeper, less saturated tones with darker edges: easier on the eyes, crisper look
+    grass=(74, 110, 64), grass2=(67, 101, 58), sidewalk=(160, 158, 151), curb=(98, 97, 92),
+    asphalt=(52, 55, 60), asphalt2=(47, 50, 55), lot=(60, 63, 68), line=(218, 218, 210),
+    yellow=(226, 178, 44), school=(104, 92, 54), roof=[(146, 102, 82), (104, 116, 128),
+    (160, 146, 120), (120, 92, 102), (92, 108, 100), (172, 168, 158)],
     shadow=(0, 0, 0, 70), hud_bg=(16, 18, 24, 200), hud_fg=(235, 238, 242), hud_dim=(150, 156, 168),
     pos=(92, 200, 120), neg=(232, 88, 80), accent=(80, 170, 255), route=(70, 200, 255),
     target=(80, 230, 140),
@@ -86,7 +88,11 @@ class Renderer:
         except pygame.error:
             pass
         self.W, self.H = width, height
-        self.screen = pygame.Surface((width, height))
+        self.final = pygame.Surface((width, height))     # what we return (world + HUD)
+        self.screen = self.final                           # current drawing target
+        self.ppm = PPM                                     # pixels per metre actually used for the world
+        self.zoom = 1.0                                    # requested zoom (1 = default view)
+        self._full = (width, height)
         self.show_hud = show_hud
         self.show_sensors = show_sensors
         self.fonts = {k: _font(*v) for k, v in dict(
@@ -121,22 +127,23 @@ class Renderer:
         pygame.draw.rect(s, (30, 34, 40), (12, 86, 46, 18), border_radius=6)
         return s
 
+    def set_zoom(self, z):
+        """Zoom the live view (0.5 = see more, 3 = close up). Takes effect next frame."""
+        self.zoom = float(np.clip(z, 0.5, 3.0))
+        return self.zoom
+
+    def _use_ppm(self, ppm):
+        """Switch the drawing scale; scaled sprite caches depend on it."""
+        if abs(ppm - self.ppm) > 1e-6:
+            self.ppm = ppm
+            self.car_scaled.clear()
+            self.rot_cache.clear()
+
     def _load_sprites(self):
-        colors = ["black", "blue", "green", "red", "yellow"]
-        npc = []
-        for c in colors:
-            for v in (1, 5):
-                img = self._load_img(f"cars/car_{c}_{v}.png")
-                npc.append(img)
-        fallback_cols = [(40, 40, 44), (40, 120, 210), (50, 170, 90), (220, 90, 40), (240, 200, 40)]
-        self.npc_src = [img if img is not None else self._fallback_car(fallback_cols[i // 2])
-                        for i, img in enumerate(npc)]
-        self.npc_src.append(self._load_img("cars/car_red_3.png") or self._fallback_car((200, 60, 50)))
-        # the agent: a clean white-ish car, tinted from the blue sprite
-        agent = self._load_img("cars/car_blue_1.png")
-        if agent is None:
-            agent = self._fallback_car((235, 238, 242))
-        self.agent_src = self._tint(agent, (245, 247, 250))
+        # high-resolution procedural cars (sedans, SUVs, vans, pickups, a taxi ...)
+        from .carart import npc_fleet, agent_car
+        self.npc_src = list(npc_fleet())
+        self.agent_src = agent_car()       # pearl white with a glass roof
         self.ped_src = []
         for p in sorted((ASSETS / "sprites" / "peds").glob("*.png")):
             img = self._load_img(f"peds/{p.name}")
@@ -148,11 +155,20 @@ class Renderer:
             pygame.draw.circle(s, (230, 190, 150), (18, 12), 8)
             self.ped_src = [s]
         self.tree_src = [self._load_img("objects/tree_large.png"), self._load_img("objects/tree_small.png")]
-        self.tree_src = [t for t in self.tree_src if t is not None]
+        # tone the bright Kenney greens down to the palette
+        self.tree_src = [self._darken(t, 0.78) for t in self.tree_src if t is not None]
         self.skid_src = self._load_img("objects/skidmark_short_1.png")
         # scaled + rotation caches
         self.car_scaled = {}
         self.rot_cache = {}
+
+    @staticmethod
+    def _darken(img, k):
+        out = img.copy()
+        arr = pygame.surfarray.pixels3d(out)
+        arr[:] = (arr.astype(np.float32) * k).astype(np.uint8)
+        del arr
+        return out
 
     @staticmethod
     def _tint(img, rgb):
@@ -171,8 +187,8 @@ class Renderer:
     def _car_surface(self, key, src, length_m, width_m):
         """Scale a car sprite (nose pointing UP in the file) to world size."""
         if key not in self.car_scaled:
-            w = max(int(width_m * PPM), 4)
-            h = max(int(length_m * PPM), 6)
+            w = max(int(width_m * self.ppm), 4)
+            h = max(int(length_m * self.ppm), 6)
             self.car_scaled[key] = pygame.transform.smoothscale(src, (w, h))
         return self.car_scaled[key]
 
@@ -191,7 +207,7 @@ class Renderer:
 
     # ------------------------------------------------------------ static city
     def w2s_static(self, p):
-        return (int((p[0] + MARGIN) * PPM), int((p[1] + MARGIN) * PPM))
+        return (int((p[0] + MARGIN) * self.ppm), int((p[1] + MARGIN) * self.ppm))
 
     def _build_static(self, env):
         city = env.city
@@ -199,15 +215,15 @@ class Renderer:
             return self._build_static_road(env)
         Wm = city.width + 2 * MARGIN
         Hm = city.height + 2 * MARGIN
-        S = pygame.Surface((int(Wm * PPM), int(Hm * PPM)))
+        S = pygame.Surface((int(Wm * self.ppm), int(Hm * self.ppm)))
         rng = np.random.default_rng(city.nx * 1000 + int(city.width))
         S.fill(C["grass"])
         # grass texture
         for _ in range(int(Wm * Hm / 6)):
-            x, y = rng.uniform(0, Wm * PPM), rng.uniform(0, Hm * PPM)
+            x, y = rng.uniform(0, Wm * self.ppm), rng.uniform(0, Hm * self.ppm)
             pygame.draw.circle(S, C["grass2"], (int(x), int(y)), int(rng.integers(2, 6)))
         ps = self.w2s_static
-        k = PPM
+        k = self.ppm
         # sidewalk band around every street
         sw = ROAD_HW + SIDEWALK_W
         for x in city.xs:
@@ -241,11 +257,11 @@ class Renderer:
         for x in city.xs:
             for side in (-1, 1):
                 pygame.draw.line(S, C["curb"], ps((x + side * ROAD_HW, -ROAD_HW)),
-                                 ps((x + side * ROAD_HW, city.height + ROAD_HW)), 2)
+                                 ps((x + side * ROAD_HW, city.height + ROAD_HW)), max(2, int(self.ppm / 4)))
         for y in city.ys:
             for side in (-1, 1):
                 pygame.draw.line(S, C["curb"], ps((-ROAD_HW, y + side * ROAD_HW)),
-                                 ps((city.width + ROAD_HW, y + side * ROAD_HW)), 2)
+                                 ps((city.width + ROAD_HW, y + side * ROAD_HW)), max(2, int(self.ppm / 4)))
         # asphalt speckle
         for _ in range(int(Wm * Hm / 3)):
             p = (rng.uniform(-ROAD_HW, city.width + ROAD_HW), rng.uniform(-ROAD_HW, city.height + ROAD_HW))
@@ -291,8 +307,8 @@ class Renderer:
             col = C["roof"][city.building_colors[i] % len(C["roof"])]
             pts = [ps(c) for c in obb_corners(b)]
             pygame.draw.polygon(S, col, pts)
-            dark = tuple(int(v * 0.75) for v in col)
-            pygame.draw.polygon(S, dark, pts, 3)
+            dark = tuple(int(v * 0.55) for v in col)
+            pygame.draw.polygon(S, dark, pts, max(2, int(self.ppm / 3)))
             # inner parapet + rooftop units
             inner = b.copy()
             inner[2] -= 1.0
@@ -349,11 +365,11 @@ class Renderer:
         from .worlds import ROAD_HALF
         city = env.city
         Wm, Hm = city.width + 2 * MARGIN, city.height + 2 * MARGIN
-        S = pygame.Surface((int(Wm * PPM), int(Hm * PPM)))
+        S = pygame.Surface((int(Wm * self.ppm), int(Hm * self.ppm)))
         rng = np.random.default_rng(int(city.width * 7))
         S.fill(C["grass"])
         for _ in range(int(Wm * Hm / 6)):
-            pygame.draw.circle(S, C["grass2"], (int(rng.uniform(0, Wm * PPM)), int(rng.uniform(0, Hm * PPM))),
+            pygame.draw.circle(S, C["grass2"], (int(rng.uniform(0, Wm * self.ppm)), int(rng.uniform(0, Hm * self.ppm))),
                                int(rng.integers(2, 6)))
         ps = self.w2s_static
         c = city.center
@@ -392,7 +408,7 @@ class Renderer:
             if not self.tree_src:
                 continue
             src = self.tree_src[0 if sz > 0.9 else 1]
-            size = int(6.5 * sz * PPM)
+            size = int(6.5 * sz * self.ppm)
             img = pygame.transform.smoothscale(src, (size, size))
             sh = pygame.Surface((size, size), pygame.SRCALPHA)
             pygame.draw.ellipse(sh, (0, 0, 0, 60), (0, 0, size, size))
@@ -401,35 +417,45 @@ class Renderer:
             S.blit(img, (px - size // 2, py - size // 2))
         return S
 
-    def overview(self, env, max_w=1200, max_h=800):
+    def overview(self, env, max_w=1600, max_h=1200):
         """A still picture of the whole level: map, route, start and parking spot.
-        Returns an (H, W, 3) uint8 array (used by the game's "Map & rules" panel)."""
-        S = self._build_static(env).copy()
-        ps = self.w2s_static
-        pts = [ps(p) for p in env.route.pts[::4]]
-        if len(pts) > 1:
-            pygame.draw.lines(S, C["route"], False, pts, 6)
-        sl = env.slot
-        box = [sl["center"][0], sl["center"][1], SLOT_D / 2 - 0.2, SLOT_W / 2 - 0.2, sl["heading"]]
-        pygame.draw.polygon(S, C["target"], [ps(c) for c in obb_corners(box)], 6)
-        start = ps(env.car.pos)
-        pygame.draw.circle(S, (255, 255, 255), start, 16)
-        pygame.draw.circle(S, C["accent"], start, 16, 5)
-        if getattr(env.city, "kind", "city") == "road":
-            # single road / parking pad: crop to the route and the pad
-            pts = np.concatenate([env.route.pts] + [obb_corners(r) for r in env.city.lot_polys()])
+        Drawn at a resolution that fits max_w x max_h (no blurry upscaling), so
+        the page can zoom into it. Returns an (H, W, 3) uint8 array."""
+        city = env.city
+        road = getattr(city, "kind", "city") == "road"
+        if road:   # single road / parking pad: only the route and the pad
+            pts = np.concatenate([env.route.pts] + [obb_corners(r) for r in city.lot_polys()])
             lo, hi = pts.min(0) - 10.0, pts.max(0) + 10.0
-            span = max(hi[0] - lo[0], (hi[1] - lo[1]) * 1.3)    # keep a pleasant ~4:3 frame
+            span = max(hi[0] - lo[0], (hi[1] - lo[1]) * 1.3)      # a pleasant ~4:3 frame
             mid = (lo + hi) / 2
             lo, hi = mid - np.array([span / 2, span / 2.6]), mid + np.array([span / 2, span / 2.6])
-            (x0, y0), (x1, y1) = ps(lo), ps(hi)
-            W0, H0 = S.get_size()
-            x0, y0 = max(0, x0), max(0, y0)
-            rect = pygame.Rect(x0, y0, min(x1, W0) - x0, min(y1, H0) - y0)
-            S = S.subsurface(rect).copy()
-        w, h = S.get_size()
-        k = min(max_w / w, max_h / h)
-        S = pygame.transform.smoothscale(S, (int(w * k), int(h * k)))
+            ppm = min(max_w / span, max_h / (span / 1.3), MAX_STATIC_PX / (max(city.width, city.height) + 2 * MARGIN))
+        else:
+            ppm = min(max_w / (city.width + 2 * MARGIN), max_h / (city.height + 2 * MARGIN))
+        old = self.ppm
+        self._use_ppm(ppm)
+        try:
+            S = self._build_static(env).copy()
+            ps = self.w2s_static
+            lw = max(int(ppm * 0.6), 3)
+            pts_s = [ps(p) for p in env.route.pts[::4]]
+            if len(pts_s) > 1:
+                pygame.draw.lines(S, C["route"], False, pts_s, lw)
+            sl = env.slot
+            box = [sl["center"][0], sl["center"][1], SLOT_D / 2 - 0.2, SLOT_W / 2 - 0.2, sl["heading"]]
+            pygame.draw.polygon(S, C["target"], [ps(c) for c in obb_corners(box)], lw)
+            start = ps(env.car.pos)
+            rad = max(int(ppm * 1.6), 8)
+            pygame.draw.circle(S, (255, 255, 255), start, rad)
+            pygame.draw.circle(S, C["accent"], start, rad, max(rad // 3, 2))
+            if road:
+                (x0, y0), (x1, y1) = ps(lo), ps(hi)
+                W0, H0 = S.get_size()
+                x0, y0 = max(0, x0), max(0, y0)
+                S = S.subsurface(pygame.Rect(x0, y0, min(x1, W0) - x0, min(y1, H0) - y0)).copy()
+        finally:
+            self._use_ppm(old)
+            self.city_id = None                      # live view rebuilds its own static image
         return np.frombuffer(pygame.image.tobytes(S, "RGB"), np.uint8).reshape(S.get_height(), S.get_width(), 3)
 
     def _road_text(self, S, text, pos, direction, color):
@@ -437,7 +463,7 @@ class Renderer:
         # and its top points in the direction of travel. Scaled to fit the lane.
         f = self.fonts["medb"]
         img = f.render(text, True, color)
-        scale = min(1.0, (LANE_W - 0.6) * PPM / img.get_width())
+        scale = min(1.0, (LANE_W - 0.6) * self.ppm / img.get_width())
         ang = math.degrees(math.atan2(direction[1], direction[0]))
         img = pygame.transform.rotozoom(img, -(ang + 90), scale)
         img.set_alpha(190)
@@ -486,7 +512,7 @@ class Renderer:
 
     def _stop_sign(self, S, pos):
         px, py = self.w2s_static(pos)
-        R = int(0.85 * PPM)
+        R = int(0.85 * self.ppm)
         pts = [(px + R * math.cos(math.pi / 8 + i * math.pi / 4), py + R * math.sin(math.pi / 8 + i * math.pi / 4))
                for i in range(8)]
         pygame.draw.polygon(S, (200, 30, 36), pts)
@@ -497,7 +523,7 @@ class Renderer:
 
     def _limit_sign(self, S, pos, kmh, school):
         px, py = self.w2s_static(pos)
-        w, h = int(1.8 * PPM), int(2.2 * PPM)
+        w, h = int(1.8 * self.ppm), int(2.2 * self.ppm)
         rect = pygame.Rect(px - w // 2, py - h // 2, w, h)
         pygame.draw.rect(S, (250, 250, 248) if not school else (250, 220, 60), rect, border_radius=3)
         pygame.draw.rect(S, (30, 30, 30), rect, 1, border_radius=3)
@@ -529,8 +555,8 @@ class Renderer:
 
     # ------------------------------------------------------------ camera
     def w2s(self, p):
-        return (int((p[0] - self.cam[0]) * PPM + self.W / 2),
-                int((p[1] - self.cam[1]) * PPM + self.H / 2))
+        return (int((p[0] - self.cam[0]) * self.ppm + self.W / 2),
+                int((p[1] - self.cam[1]) * self.ppm + self.H / 2))
 
     def _lerp_pose(self, key, x, y, th, alpha):
         prev = self.prev_pose.get(key)
@@ -549,11 +575,33 @@ class Renderer:
         self.cur_pose = {}
 
     # ------------------------------------------------------------ main draw
+    def _world_ppm(self, env):
+        """Drawing scale for the world: the zoom, capped by the static image size."""
+        Wm = env.city.width + 2 * MARGIN
+        Hm = env.city.height + 2 * MARGIN
+        return min(PPM * self.zoom, MAX_STATIC_PX / max(Wm, Hm))
+
     def draw(self, env, alpha=1.0, dt=0.1):
-        key = (env.city_seed, id(env.city))
+        ppm = self._world_ppm(env)
+        f = PPM * self.zoom / ppm                # >1 only when zoomed past the static-size cap
+        Wf, Hf = self._full
+        wW, wH = max(int(Wf / f), 64), max(int(Hf / f), 36)
+        if (wW, wH) != getattr(self, "_world_size", None):
+            self._world_size = (wW, wH)
+            self.world = pygame.Surface((wW, wH))
+            self.ov_under = pygame.Surface((wW, wH), pygame.SRCALPHA)
+            self.ov_over = pygame.Surface((wW, wH), pygame.SRCALPHA)
+        self.screen, self.W, self.H = self.world, wW, wH      # world pass
+        key = (env.city_seed, id(env.city), round(ppm, 3))
         if key != self.city_id:
+            same_city = self.city_id is not None and self.city_id[:2] == key[:2]
             self.city_id = key
+            self._use_ppm(ppm)
             self.static = self._build_static(env)
+            if same_city:                         # zoom change: keep camera/particles
+                self.ground = self.static.copy()
+                self.last_skid = None
+                return self._finish(env)
             self.ground = self.static.copy()
             self.cam = None
             self.particles = []
@@ -576,8 +624,8 @@ class Renderer:
         scr = self.screen
         # --- ground --------------------------------------------------------
         self._skids(env, ax, ay, ath)
-        ox = int((self.cam[0] + MARGIN) * PPM - self.W / 2)
-        oy = int((self.cam[1] + MARGIN) * PPM - self.H / 2)
+        ox = int((self.cam[0] + MARGIN) * self.ppm - self.W / 2)
+        oy = int((self.cam[1] + MARGIN) * self.ppm - self.H / 2)
         scr.fill(C["grass"])
         scr.blit(self.ground, (-ox, -oy))
         # --- route + target slot ------------------------------------------------
@@ -590,7 +638,7 @@ class Renderer:
         # --- actors ---------------------------------------------------------------
         for c in env.traffic.cars:
             x, y, th = self._lerp_pose(c.id, c.x, c.y, c.theta, alpha)
-            if abs(x - self.cam[0]) * PPM > self.W / 2 + 60 or abs(y - self.cam[1]) * PPM > self.H / 2 + 60:
+            if abs(x - self.cam[0]) * self.ppm > self.W / 2 + 60 or abs(y - self.cam[1]) * self.ppm > self.H / 2 + 60:
                 continue
             src = self.npc_src[c.color % len(self.npc_src)]
             self._blit_car(scr, (x, y), th, src, ("n", c.color % len(self.npc_src)), length=4.5)
@@ -599,7 +647,7 @@ class Renderer:
             if p.state == "hidden" and not self.show_sensors:
                 pass
             x, y, th = self._lerp_pose(("p", id(p)), p.pos[0], p.pos[1], p.heading, alpha)
-            if abs(x - self.cam[0]) * PPM > self.W / 2 + 40 or abs(y - self.cam[1]) * PPM > self.H / 2 + 40:
+            if abs(x - self.cam[0]) * self.ppm > self.W / 2 + 40 or abs(y - self.cam[1]) * self.ppm > self.H / 2 + 40:
                 continue
             self._ped(scr, p, x, y, th)
         # agent
@@ -609,11 +657,20 @@ class Renderer:
         self._traffic_lights(env)
         # particles
         self._particles(env, dt)
-        # --- HUD -----------------------------------------------------------------
+        return self._finish(env)
+
+    def _finish(self, env):
+        """Scale the world to the output size (if needed) and draw the HUD sharp on top."""
+        Wf, Hf = self._full
+        if self.world.get_size() != (Wf, Hf):
+            pygame.transform.smoothscale(self.world, (Wf, Hf), self.final)
+        else:
+            self.final.blit(self.world, (0, 0))
+        self.screen, self.W, self.H = self.final, Wf, Hf
         if self.show_hud:
             self._hud(env)
         # raw RGB bytes -> (H, W, 3) array; much faster than surfarray + copy
-        return np.frombuffer(pygame.image.tobytes(scr, "RGB"), np.uint8).reshape(self.H, self.W, 3)
+        return np.frombuffer(pygame.image.tobytes(self.final, "RGB"), np.uint8).reshape(Hf, Wf, 3)
 
     # ------------------------------------------------------------ pieces
     def _skids(self, env, x, y, th):
@@ -677,7 +734,7 @@ class Renderer:
             p.r += p.grow * dt
             a = int(200 * p.life / p.max_life)
             sx, sy = self.w2s((p.x, p.y))
-            pygame.draw.circle(surf, (*p.color, a), (sx, sy), max(int(p.r * PPM), 1))
+            pygame.draw.circle(surf, (*p.color, a), (sx, sy), max(int(p.r * self.ppm), 1))
             alive.append(p)
         self.particles = alive[-600:]
         self.screen.blit(surf, (0, 0))
@@ -760,7 +817,7 @@ class Renderer:
 
     def _ped(self, S, p, x, y, th):
         src = self.ped_src[p.sprite % len(self.ped_src)]
-        w = int(1.25 * PPM)          # drawn a bit larger than life so people are easy to spot
+        w = int(1.25 * self.ppm)          # drawn a bit larger than life so people are easy to spot
         h = int(w * src.get_height() / src.get_width())
         bob = 1.0 + 0.06 * math.sin(p.anim * 3) if p.state not in ("wait", "hidden") else 1.0
         key = ("ped", p.sprite % len(self.ped_src), int(bob * 20))
@@ -782,7 +839,7 @@ class Renderer:
         city = env.city
         for n, lt in city.lights.items():
             c = city.nodes[n]
-            if abs(c[0] - self.cam[0]) * PPM > self.W / 2 + 120 or abs(c[1] - self.cam[1]) * PPM > self.H / 2 + 120:
+            if abs(c[0] - self.cam[0]) * self.ppm > self.W / 2 + 120 or abs(c[1] - self.cam[1]) * self.ppm > self.H / 2 + 120:
                 continue
             for b in city.adj[n]:
                 d = city.edge_dir(n, b)         # arm direction

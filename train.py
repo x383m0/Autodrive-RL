@@ -140,6 +140,10 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     (out / "plots").mkdir(exist_ok=True)
     ckpt_dir.mkdir(exist_ok=True)
+    # "Stop" from the game: a STOP file in the run folder. Works on every OS
+    # (on Windows, terminating a process kills it at once and nothing gets saved).
+    stop_file = out / "STOP"
+    stop_file.unlink(missing_ok=True)
 
     # ---- reward config (on resume, reuse the saved one) -------------------------
     if args.resume and (out / "config.yaml").exists():
@@ -292,6 +296,9 @@ def main():
             if time.time() - t_start > budget:
                 print("[train] time budget reached")
                 return False
+            if not stop_requested["flag"] and self.n_calls % 20 == 0 and stop_file.exists():
+                stop_requested["flag"] = True
+                print("\n[train] stop requested - saving the car ...", flush=True)
             if stop_requested["flag"]:
                 return False
             return True

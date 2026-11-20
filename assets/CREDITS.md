@@ -9,10 +9,10 @@ system synthesises a replacement.
 
 | Files | Source | License |
 |---|---|---|
-| `cars/*.png`, `peds/*.png`, `objects/*.png` | Kenney "Racing Pack" (kenney.nl), via the `series-ai/jam-ready-assets` GitHub mirror | CC0 |
+| `peds/*.png`, `objects/*.png` | Kenney "Racing Pack" (kenney.nl), via the `series-ai/jam-ready-assets` GitHub mirror | CC0 |
 
-The agent car is `cars/car_blue_1.png` recoloured to white at load time.
-Roads, buildings, markings, signs and traffic lights are drawn procedurally.
+Cars (agent and traffic) are drawn procedurally in high resolution by
+`autodrive/carart.py` (no image files). Roads, buildings, markings, signs and traffic lights are drawn procedurally.
 
 ## Sounds (`sounds/`)
 

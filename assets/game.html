@@ -115,6 +115,14 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .stepper button svg { width:12px; height:12px; display:block; }
 .tag.new { color:#06121f; background:var(--gold); border-color:var(--gold); font-weight:700; }
 .preview { width:100%; border-radius:10px; border:1px solid var(--line); display:block; }
+.zoomctl { display:inline-flex; align-items:center; gap:0; }
+.zoomctl .zl { min-width:46px; text-align:center; font-size:12px; color:var(--fg); font-variant-numeric:tabular-nums; cursor:pointer; }
+.mapwrap { position:relative; overflow:hidden; border-radius:10px; border:1px solid var(--line); margin-top:8px; cursor:grab; touch-action:none; }
+.mapwrap.drag { cursor:grabbing; }
+.mapwrap img { width:100%; display:block; transform-origin:0 0; user-select:none; -webkit-user-drag:none; }
+.mapwrap .zoomctl { position:absolute; right:8px; bottom:8px; }
+.mapwrap .stepper { background:rgba(24,27,34,.9); }
+#view { cursor:zoom-in; }
 .levelcard { padding:18px 20px; }
 .brief { font-size:21px; line-height:1.4; margin:12px 0 18px; max-width:62ch; }
 .starrow { display:flex; gap:34px; align-items:flex-end; }
@@ -151,7 +159,9 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
       </section>
       <section class="card" id="mapCard">
         <div class="row"><h3>The level</h3><span class="dim">where your car will drive</span></div>
-        <img class="preview" id="mapImg" alt="map of the level" style="margin-top:8px">
+        <div class="mapwrap" id="mapWrap"><img id="mapImg" alt="map of the level" draggable="false">
+          <span class="zoomctl stepper"><button type="button" id="mapOut" title="zoom out"></button><span class="zl" id="mapZl" title="reset">100%</span><button type="button" id="mapIn" title="zoom in"></button></span></div>
+        <div class="dim" style="font-size:12px;margin-top:4px">Scroll or use -/+ to zoom, drag to move.</div>
         <div class="legend" style="margin-top:6px"><span><i style="background:#fff"></i>start</span>
           <span><i style="background:#46c8ff"></i>GPS route</span><span><i style="background:#50e68c"></i>parking spot</span></div>
       </section>
@@ -173,6 +183,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
           <span class="dim">Speed</span>
           <select id="speed"><option value="0.5">0.5</option><option value="1" selected>1</option><option value="2">2</option><option value="4">4</option></select>
           <button id="next">Next road</button>
+          <span class="zoomctl stepper" title="zoom (or scroll on the view)"><button type="button" id="liveOut" title="zoom out"></button><span class="zl" id="liveZl" title="reset">100%</span><button type="button" id="liveIn" title="zoom in"></button></span>
           <button id="fsExit" class="ghost" hidden>Exit fullscreen</button>
         </div>
         <div id="fsResult"></div>
@@ -288,7 +299,7 @@ function renderHeader() {
     `<div class="star${i < won ? ' won' : ''}" title="${i < won ? 'earned' : 'score ' + t + ' points to earn this star'}">${starSVG(i < won)}<div class="need">${t}+</div></div>`).join('');
   $('lvChips').innerHTML = (p.best !== undefined ? `<span class="chip">your best: <b>${p.best}</b></span>` : '') +
     (p.attempts ? `<span class="chip">attempts: ${p.attempts}</span>` : '');
-  $('mapImg').src = '/api/preview.png?level=' + lv.id;
+  if (!$('mapImg').src.endsWith('level=' + lv.id)) { $('mapImg').src = '/api/preview.png?level=' + lv.id; resetMap(); }
   $('loadBest').hidden = !p.best_recipe;
   $('initWrap').hidden = !(lv.id > 1 && prog(lv.id - 1).best_run);
 }
@@ -469,6 +480,50 @@ $('train').onclick = async () => {
 $('stop').onclick = () => post('/api/stop');
 $('next').onclick = () => fetch('/control?cmd=next');
 $('speed').onchange = e => fetch('/control?cmd=speed&v=' + e.target.value);
+
+// ---------------- zoom ----------------
+for (const id of ['mapOut', 'liveOut']) $(id).innerHTML = MINUS;
+for (const id of ['mapIn', 'liveIn']) $(id).innerHTML = PLUS;
+// live view: the server renders the zoom, so the picture stays sharp
+let LZ = 1, lzTimer = null;
+function setLiveZoom(z) {
+  LZ = Math.min(3, Math.max(0.5, Math.round(z * 100) / 100));
+  $('liveZl').textContent = Math.round(LZ * 100) + '%';
+  clearTimeout(lzTimer); lzTimer = setTimeout(() => fetch('/control?cmd=zoom&v=' + LZ), 40);
+}
+$('liveIn').onclick = () => setLiveZoom(LZ * 1.25);
+$('liveOut').onclick = () => setLiveZoom(LZ / 1.25);
+$('liveZl').onclick = () => setLiveZoom(1);
+$('view').addEventListener('wheel', e => { e.preventDefault(); setLiveZoom(LZ * Math.exp(-e.deltaY * 0.0015)); }, {passive:false});
+// map: zoom towards the cursor and drag to pan (the map image is high resolution)
+const MZ = {z:1, x:0, y:0};
+function applyMap() {
+  const w = $('mapWrap'), W = w.clientWidth, H = w.clientHeight;
+  MZ.x = Math.min(0, Math.max(W - W * MZ.z, MZ.x)); MZ.y = Math.min(0, Math.max(H - H * MZ.z, MZ.y));
+  $('mapImg').style.transform = `translate(${MZ.x}px,${MZ.y}px) scale(${MZ.z})`;
+  $('mapZl').textContent = Math.round(MZ.z * 100) + '%';
+}
+function zoomMap(z, cx, cy) {
+  const w = $('mapWrap'); z = Math.min(3, Math.max(1, z));
+  if (cx === undefined) { cx = w.clientWidth / 2; cy = w.clientHeight / 2; }
+  MZ.x = cx - (cx - MZ.x) * z / MZ.z; MZ.y = cy - (cy - MZ.y) * z / MZ.z; MZ.z = z; applyMap();
+}
+function resetMap() { MZ.z = 1; MZ.x = MZ.y = 0; applyMap(); }
+$('mapIn').onclick = () => zoomMap(MZ.z * 1.4);
+$('mapOut').onclick = () => zoomMap(MZ.z / 1.4);
+$('mapZl').onclick = resetMap;
+$('mapWrap').addEventListener('wheel', e => {
+  e.preventDefault(); const r = $('mapWrap').getBoundingClientRect();
+  zoomMap(MZ.z * Math.exp(-e.deltaY * 0.002), e.clientX - r.left, e.clientY - r.top);
+}, {passive:false});
+let drag = null;
+$('mapWrap').addEventListener('pointerdown', e => {
+  if (e.target.closest('.zoomctl')) return;
+  drag = {x:e.clientX - MZ.x, y:e.clientY - MZ.y}; $('mapWrap').classList.add('drag'); $('mapWrap').setPointerCapture(e.pointerId);
+});
+$('mapWrap').addEventListener('pointermove', e => { if (drag) { MZ.x = e.clientX - drag.x; MZ.y = e.clientY - drag.y; applyMap(); } });
+$('mapWrap').addEventListener('pointerup', () => { drag = null; $('mapWrap').classList.remove('drag'); });
+$('mapWrap').addEventListener('dblclick', e => { const r = $('mapWrap').getBoundingClientRect(); zoomMap(MZ.z * 2, e.clientX - r.left, e.clientY - r.top); });
 
 // ---------------- fullscreen ----------------
 $('fsBtn').onclick = () => $('liveCard').requestFullscreen && $('liveCard').requestFullscreen();

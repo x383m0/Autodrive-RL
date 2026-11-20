@@ -59,6 +59,12 @@ for passing score thresholds; 1 star unlocks the next level.
 - The level card shows the goal in large text and three SVG stars with the
   points each needs; stars turn gold when earned.
 - Maps show no speed-limit signs (game rule: no limits except school zones).
+- Zoom: the level map zooms (scroll, -/+ buttons, double-click; up to 300%)
+  and pans by dragging. The live view zooms 50-300% (scroll on the picture or
+  the -/+ buttons, also in fullscreen); the server renders the zoom, so it stays sharp.
+- "Stop and test now" asks training to stop through a `STOP` file in the run
+  folder, so the car is saved on every OS (Windows included). If training was
+  killed anyway, the last checkpoint is tested.
 
 ## Level page template (all current and future levels)
 

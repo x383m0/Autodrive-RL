@@ -85,6 +85,7 @@ class Spectator:
         self.events = deque(maxlen=200)       # (id, dict) for /events
         self.event_id = 0
         self.paused = False
+        self.zoom = 1.0
         self.watchers = 0                     # open video streams; nobody watching = no rendering
         self.speed = 1.0
         self.request_new = False
@@ -280,7 +281,9 @@ class Spectator:
             self.env.renderer.show_sensors = not self.env.renderer.show_sensors
         elif cmd == "hud":
             self.env.renderer.show_hud = not self.env.renderer.show_hud
-        return {"paused": self.paused, "speed": self.speed, "stage": self.stage,
+        elif cmd == "zoom":
+            self.zoom = self.env.renderer.set_zoom(float(q.get("v", ["1"])[0]))
+        return {"paused": self.paused, "speed": self.speed, "stage": self.stage, "zoom": self.zoom,
                 "sensors": self.env.renderer.show_sensors, "hud": self.env.renderer.show_hud}
 
 
@@ -328,6 +331,7 @@ code { color:var(--dim); font-size:12px; word-break:break-all; }
   <button id="sensors" class="on">Sensors</button>
   <button id="hud" class="on">HUD</button>
   <button id="sound">Sound on</button>
+  <span class="dim">Zoom</span><button id="zout">-</button><span id="zl">100%</span><button id="zin">+</button>
 </header>
 <main>
   <img id="view" src="/stream.mjpg" alt="live view of the self-driving car">
@@ -360,6 +364,10 @@ const ctl = (q) => fetch('/control?' + q).then(r => r.json()).then(s => {
 ctl('');   // read the current settings when the page opens
 $('pause').onclick = () => ctl('cmd=pause');
 $('next').onclick = () => ctl('cmd=next');
+let Z = 1;
+function zoom(z) { Z = Math.min(3, Math.max(0.5, Math.round(z * 100) / 100)); $('zl').textContent = Math.round(Z * 100) + '%'; ctl('cmd=zoom&v=' + Z); }
+$('zin').onclick = () => zoom(Z * 1.25); $('zout').onclick = () => zoom(Z / 1.25); $('zl').onclick = () => zoom(1);
+$('view').addEventListener('wheel', e => { e.preventDefault(); zoom(Z * Math.exp(-e.deltaY * 0.0015)); }, {passive:false});
 $('speed').onchange = e => ctl('cmd=speed&v=' + e.target.value);
 $('stage').onchange = e => ctl('cmd=stage&v=' + e.target.value);
 $('sensors').onclick = () => ctl('cmd=sensors');
@@ -516,7 +524,7 @@ def main():
                     help="reload the newest checkpoint while that experiment is training")
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--host", default="127.0.0.1", help="0.0.0.0 = reachable from your network")
-    ap.add_argument("--quality", type=int, default=80, help="JPEG quality of the stream")
+    ap.add_argument("--quality", type=int, default=90, help="JPEG quality of the stream")
     ap.add_argument("--fps", type=int, default=30, help="frames per second of the stream (10-60)")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
