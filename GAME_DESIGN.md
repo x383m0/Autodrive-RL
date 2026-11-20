@@ -99,7 +99,13 @@ entry in `autodrive/levels.py`:
   Default training times: 8 and 10 min.
 - The level's curriculum runs automatically behind the scenes (e.g. starting
   close to the spot first); the player only designs the reward.
-- Optional: start from your best car of the previous level.
+- **Start from**: a new car, *continue my last car here*, *continue my best car
+  here*, or *my best car from the previous level*. After every training (good
+  result or not) the results offer **Continue training this car**.
+  Continuing keeps everything the car learned (weights, sensor normalisation
+  and, on the same level, its curriculum stage); only the rewards (and time)
+  can change. "use its rewards" loads the rewards that car was trained with.
+  Each run stores `meta.json` (parent car, total minutes trained, score, recipe).
 
 ## Build order
 

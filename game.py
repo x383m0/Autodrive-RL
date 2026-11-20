@@ -166,6 +166,7 @@ def hints(level, cfg, result, train_rows):
 # =====================================================================
 class Game:
     def __init__(self, fps, quality):
+        self.parent, self.base_minutes = None, 0.0   # car this training continues from
         self.view_opts = {}                  # last zoom / screen size sent by the page
         self.fps, self.quality = fps, quality
         self.progress = _load(PROGRESS, {})
@@ -250,7 +251,16 @@ class Game:
                            for i in recipe.get("custom_ids", []) if i in lib]}
         return parse_config(user, "your design", allow_empty=True)
 
-    def start(self, lid, recipe, minutes, init_prev):
+    def source_car(self, lid, start_from):
+        """The saved car a training starts from: None (new car), or its run folder."""
+        p = self.progress.get(str(lid), {})
+        src = {"last": p.get("last_run"), "best": p.get("best_run"),
+               "prev": self.progress.get(str(lid - 1), {}).get("best_run")}.get(start_from)
+        if src and (Path(src) / "model.zip").exists() and (Path(src) / "vecnormalize.pkl").exists():
+            return Path(src)
+        return None
+
+    def start(self, lid, recipe, minutes, start_from="new"):
         with self.lock:
             if self.phase in ("training", "testing"):
                 return "Already training."
@@ -269,9 +279,22 @@ class Game:
             cmd = [sys.executable, str(ROOT / "train.py"), "--reward", str(run / "my_reward.yaml"),
                    "--name", f"game/{run.name}", "--level", str(lid), "--minutes", str(minutes),
                    "--ckpt-every", "40000"]
-            prev = self.progress.get(str(lid - 1), {}).get("best_run")
-            if init_prev and prev and (Path(prev) / "model.zip").exists():
-                cmd += ["--init-from", prev]
+            # continue an earlier car: same weights, same sensor normalisation and,
+            # on the same level, the same curriculum stage - only the rewards change
+            src = self.source_car(lid, start_from)
+            if start_from != "new" and src is None:
+                return "That car is not available any more - pick another one."
+            self.parent, self.base_minutes = src, 0.0
+            if src is not None:
+                cmd += ["--init-from", str(src)]
+                meta = _load(src / "meta.json", {})
+                if meta.get("level", lid) == lid:
+                    self.base_minutes = float(meta.get("minutes_total", 0.0))
+                    try:
+                        k = int(json.load(open(src / "curriculum.json"))["stage"])
+                        cmd += ["--start-stage", str(max(0, min(k, len(lv["curriculum"]) - 1)))]
+                    except Exception:
+                        pass
             self.proc = subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                          text=True, bufsize=1)
             self.phase, self.level_id, self.run_dir = "training", lid, run
@@ -325,13 +348,20 @@ class Game:
         def tick(i, d):
             self.test_done = i + 1
         res = run_test(run, lv, n=self.test_total, on_drive=tick)
+        trained = round(self.base_minutes + (time.time() - self.t_start) / 60, 1)
+        _save(run / "meta.json", {"level": lv["id"], "parent": str(self.parent) if self.parent else None,
+                                  "minutes_total": trained, "score": res["score"], "recipe": self.recipe})
+        res["minutes_total"] = trained
+        res["continued"] = self.parent is not None
         rows = read_progress(run)
         res["hints"] = hints(lv, self.cfg, res, rows)
         res["minutes"] = round((time.time() - self.t_start) / 60, 1)
         p = self.progress.setdefault(str(lv["id"]), {})
         res["new_best"] = res["score"] > p.get("best", -1)
         if res["new_best"]:
-            p.update(best=res["score"], best_run=str(run), best_recipe=self.recipe)
+            p.update(best=res["score"], best_run=str(run), best_recipe=self.recipe, best_minutes=trained)
+        # the car you just trained can always be continued, good result or not
+        p.update(last_run=str(run), last_score=res["score"], last_minutes=trained, last_recipe=self.recipe)
         p["stars"] = max(p.get("stars", 0), res["stars"])
         _save(PROGRESS, self.progress)
         json.dump(res, open(run / "test_result.json", "w"), indent=1)
@@ -418,8 +448,11 @@ def make_handler(game: Game):
                 return self._json({"status": "bad request"}, 400)
             try:
                 if u.path == "/api/train":
+                    start_from = str(body.get("start_from") or ("prev" if body.get("init_prev") else "new"))
+                    if start_from not in ("new", "last", "best", "prev"):
+                        start_from = "new"
                     msg = game.start(int(body["level"]), body.get("recipe", {}),
-                                     float(np.clip(float(body["minutes"]), 0.5, 120)), bool(body.get("init_prev")))
+                                     float(np.clip(float(body["minutes"]), 0.5, 120)), start_from)
                     self._json({"status": msg})
                 elif u.path == "/api/stop":
                     game.stop()

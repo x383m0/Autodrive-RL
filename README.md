@@ -35,7 +35,8 @@ numbers) and type how many points each one gives - positive to encourage,
 negative to punish. Or **create your own rule** ("when speed > 30 km/h and a
 pedestrian is closer than 6 m, give -0.5 every step"); your rules are saved
 in a personal library for every level. Choose a training time, press Train,
-watch the car learn live (fullscreen button included), and a hidden test on
+watch the car learn live (fullscreen button included), continue training the
+same car later with changed rewards if you want, and a hidden test on
 12 new roads gives you points and stars. 1 star unlocks the next level.
 
 Levels 1-5 are playable now (park, straight road, bends, into town, rules of

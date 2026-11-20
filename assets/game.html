@@ -115,6 +115,8 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .stepper button svg { width:12px; height:12px; display:block; }
 .tag.new { color:#06121f; background:var(--gold); border-color:var(--gold); font-weight:700; }
 .preview { width:100%; border-radius:10px; border:1px solid var(--line); display:block; }
+#msg.note { color:var(--dim); }
+#workshop.flash { box-shadow:0 0 0 2px var(--accent); transition:box-shadow .3s; }
 .debugtag { margin-left:auto; margin-right:10px; font-size:12px; font-weight:700; letter-spacing:.04em; color:#f0a43c;
             border:1px solid #f0a43c; border-radius:999px; padding:3px 10px; }
 .debugtag + .total { margin-left:0; }
@@ -155,7 +157,8 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
         <div class="rlist" id="rlist"></div>
         <div class="trainbar">
           <label>Training time <input type="range" id="minutes" min="1" max="45" step="1"> <b id="minutesLbl"></b> min</label>
-          <label id="initWrap" hidden><input type="checkbox" id="initPrev"> start from my best car of the previous level</label>
+          <label id="fromWrap" hidden>Start from <select id="startFrom"></select></label>
+          <button class="ghost" id="fromRecipe" hidden title="put the rewards that car was trained with in your list, to edit them">use its rewards</button>
           <button class="primary" id="train" style="margin-left:auto">Train</button>
         </div>
         <div id="msg" class="err"></div>
@@ -304,13 +307,48 @@ function renderHeader() {
     (p.attempts ? `<span class="chip">attempts: ${p.attempts}</span>` : '');
   if (!$('mapImg').src.endsWith('level=' + lv.id)) { $('mapImg').src = '/api/preview.png?level=' + lv.id; resetMap(); }
   $('loadBest').hidden = !p.best_recipe;
-  $('initWrap').hidden = !(lv.id > 1 && prog(lv.id - 1).best_run);
+  renderStartFrom();
+}
+// "Start from": a new car, or continue an earlier car (keeps everything it learned)
+function startOptions() {
+  const lv = LV(), p = prog(lv.id), pp = prog(lv.id - 1), o = [['new', 'a new car']];
+  if (p.last_run) o.push(['last', `continue my last car here (${Math.round(p.last_score)} pts, ${p.last_minutes} min trained)`]);
+  if (p.best_run && p.best_run !== p.last_run)
+    o.push(['best', `continue my best car here (${Math.round(p.best)} pts${p.best_minutes ? ', ' + p.best_minutes + ' min trained' : ''})`]);
+  if (lv.id > 1 && pp.best_run) o.push(['prev', `my best car from level ${lv.id - 1}`]);
+  return o;
+}
+function renderStartFrom() {
+  const sel = $('startFrom'), keep = sel.value, o = startOptions();
+  sel.innerHTML = o.map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join('');
+  sel.value = o.some(x => x[0] === keep) ? keep : 'new';
+  $('fromWrap').hidden = o.length < 2;
+  updateTrainLabel();
+}
+function fromRecipe() {
+  const p = prog(SEL), v = $('startFrom').value;
+  return v === 'last' ? p.last_recipe : v === 'best' ? p.best_recipe : v === 'prev' ? prog(SEL - 1).best_recipe : null;
+}
+function updateTrainLabel() {
+  const v = $('startFrom').value, cont = v === 'last' || v === 'best';
+  $('train').textContent = cont ? 'Continue training' : 'Train';
+  $('fromRecipe').hidden = !fromRecipe();
+}
+$('startFrom').onchange = updateTrainLabel;
+$('fromRecipe').onclick = () => { const r = fromRecipe(); if (r) { RECIPE = JSON.parse(JSON.stringify(r)); renderRecipe(); } };
+function continueCar() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  renderStartFrom(); $('startFrom').value = 'last'; updateTrainLabel();
+  $('msg').className = 'note';
+  $('msg').textContent = 'Continuing your last car: it keeps everything it learned. Change the rewards if you like, choose the time and press Continue training.';
+  $('workshop').scrollIntoView({behavior:'smooth', block:'start'});
+  $('workshop').classList.add('flash'); setTimeout(() => $('workshop').classList.remove('flash'), 1400);
 }
 async function selectLevel(id) {
   if (STATE && (STATE.phase === 'training' || STATE.phase === 'testing')) return;
   SEL = id; RECIPE = {terms:{}, custom_ids:[]};            // every visit starts EMPTY
   $('minutes').value = LV().minutes; $('minutesLbl').textContent = LV().minutes;
-  $('results').hidden = true; $('msg').textContent = '';
+  $('results').hidden = true; $('msg').textContent = ''; $('msg').className = 'err';
   renderLevels(); renderHeader(); renderRecipe();
   await post('/api/view', {level:id});
   await refresh();
@@ -466,7 +504,7 @@ $('bSave').onclick = async () => {
 
 // ---------------- train ----------------
 $('train').onclick = async () => {
-  $('msg').textContent = '';
+  $('msg').textContent = ''; $('msg').className = 'err';
   const terms = {}; let bad = false;
   $('rlist').querySelectorAll('.ritem').forEach(d => d.classList.remove('invalid'));
   Object.keys(RECIPE.terms).forEach((n, i) => {
@@ -477,7 +515,7 @@ $('train').onclick = async () => {
   if (bad) { $('msg').textContent = 'Type a number of points for every reward in your list (negative = a penalty).'; return; }
   if (!Object.keys(terms).length && !RECIPE.custom_ids.length &&
       !confirm('No rewards: every step is worth 0 points, so the car will learn nothing. Train anyway?')) return;
-  const r = await post('/api/train', {level:SEL, recipe:{terms, custom_ids:RECIPE.custom_ids}, minutes:+$('minutes').value, init_prev:$('initPrev').checked});
+  const r = await post('/api/train', {level:SEL, recipe:{terms, custom_ids:RECIPE.custom_ids}, minutes:+$('minutes').value, start_from:$('startFrom').value});
   if (r.status !== 'ok') $('msg').textContent = r.status; else refresh();
 };
 $('stop').onclick = () => post('/api/stop');
@@ -570,6 +608,7 @@ function setLive(on) {
 }
 function renderState() {
   const s = STATE, busy = s.phase === 'training' || s.phase === 'testing';
+  if (!busy) renderStartFrom();
   setLive(s.live && s.level === SEL);
   $('train').disabled = busy; $('addBtn').disabled = busy;
   $('trainBox').hidden = !busy;
@@ -602,7 +641,9 @@ function resultHTML(r) {
     <div class="drives">${bars}</div>
     <div class="legend"><span><i style="background:var(--ok)"></i>parked</span><span><i style="background:var(--bad)"></i>crash</span>
       <span><i style="background:var(--warn)"></i>lost / stuck / too slow</span><span>bar height = points</span></div>
-    <h3 style="font-size:14px; margin:14px 0 4px">Hints</h3>${r.hints.map(h => `<div class="hint">${esc(h)}</div>`).join('')}`;
+    <h3 style="font-size:14px; margin:14px 0 4px">Hints</h3>${r.hints.map(h => `<div class="hint">${esc(h)}</div>`).join('')}
+    <div class="row" style="margin-top:12px"><span class="dim">${r.minutes_total ? `This car has trained ${r.minutes_total} min in total.` : ''}</span>
+      <button class="primary" style="margin-left:auto" onclick="continueCar()" title="keep everything it learned and train more, with the same or new rewards">Continue training this car</button></div>`;
 }
 function showResult(r) {
   $('results').innerHTML = resultHTML(r); $('results').hidden = false;
