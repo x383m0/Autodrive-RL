@@ -177,11 +177,12 @@ class Path:
             ds = self.s[i + 1] - self.s[i]
             t = (s - self.s[i]) / ds if ds > 1e-9 else 0.0
             return self.pts[i] * (1 - t) + self.pts[i + 1] * t
-        s = np.clip(s, 0.0, self.length)
-        i = np.clip(np.searchsorted(self.s, s) - 1, 0, len(self.s) - 2)
-        t = (s - self.s[i]) / np.maximum(self.s[i + 1] - self.s[i], 1e-9)
-        t = np.asarray(t)[..., None]
-        return self.pts[i] * (1 - t) + self.pts[i + 1] * t
+        # vector path: np.interp does the same clamped linear interpolation, much faster
+        s = np.asarray(s, dtype=float)
+        out = np.empty(s.shape + (2,))
+        out[..., 0] = np.interp(s, self.s, self.pts[:, 0])
+        out[..., 1] = np.interp(s, self.s, self.pts[:, 1])
+        return out
 
     def heading(self, s):
         return float(self.headings[self.idx(s)]) if np.ndim(s) == 0 else self.headings[self.idx(s)]

@@ -204,14 +204,16 @@ class TrafficManager:
             # --- vehicles in my lane ahead
             leader = -1
             if len(others_pos) > 1:
-                d = np.linalg.norm(pts_ahead[:, None, :] - others_pos[None, :, :], axis=2)  # (n, m)
-                d[:, k] = 1e9                     # that's me
-                hit = d < 1.7
+                diff = pts_ahead[:, None, :] - others_pos[None, :, :]
+                d2 = diff[..., 0] ** 2 + diff[..., 1] ** 2                 # squared distances (n, m)
+                d2[:, k] = 1e18                   # that's me
+                hit = d2 < 1.7 ** 2
                 if agent_pts is not None:
                     # the agent counts with its whole body (centre, ends, corners): a
                     # car that is a bit off-centre or at an angle still blocks the lane
-                    da = np.linalg.norm(pts_ahead[:, None, :] - agent_pts[None, :, :], axis=2).min(1)
-                    hit[:, -1] = (da < 1.4) | hit[:, -1]
+                    da = pts_ahead[:, None, :] - agent_pts[None, :, :]
+                    da2 = (da[..., 0] ** 2 + da[..., 1] ** 2).min(1)
+                    hit[:, -1] = (da2 < 1.4 ** 2) | hit[:, -1]
                 for j in np.where(hit.any(0))[0]:
                     i0 = int(np.argmax(hit[:, j]))
                     # ignore cars travelling towards us (oncoming lane overlap at turns) -
@@ -235,8 +237,8 @@ class TrafficManager:
                         car.wait_time = 0.0
             # --- pedestrians in my path (yield!)
             if len(ped_pos):
-                d = np.linalg.norm(pts_ahead[:20, None, :] - ped_pos[None, :, :], axis=2)
-                hit = d < 2.2
+                dp = pts_ahead[:20, None, :] - ped_pos[None, :, :]
+                hit = (dp[..., 0] ** 2 + dp[..., 1] ** 2) < 2.2 ** 2
                 if hit.any():
                     i0 = int(np.argmax(hit.any(1)))
                     g = look[i0] - NPC_LEN / 2 - 2.0

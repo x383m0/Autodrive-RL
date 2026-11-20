@@ -26,6 +26,9 @@ import argparse
 import csv
 import json
 import os
+# one BLAS thread per process: 8 simulation workers each starting 4 numpy
+# threads on 4 cores only fight each other (PyTorch has its own setting below)
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 import shutil
 import sys
 import time
@@ -50,6 +53,7 @@ def parse():
     ap.add_argument("--minutes", type=float, default=45.0, help="wall-clock training budget")
     ap.add_argument("--steps", type=int, default=20_000_000, help="max environment steps")
     ap.add_argument("--n-envs", type=int, default=8)
+    ap.add_argument("--n-epochs", type=int, default=6, help="PPO passes over each batch of experience")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--quick", action="store_true", help="2-minute smoke test, tiny eval")
     ap.add_argument("--resume", action="store_true", help="continue from experiments/<name>/checkpoints")
@@ -89,7 +93,7 @@ def make_env_fn(reward_cfg, stage, rank, seed, level=None):
 def main():
     args = parse()
     import torch
-    torch.set_num_threads(2)
+    torch.set_num_threads(int(os.environ.get("AUTODRIVE_TORCH_THREADS", "2")))
     from stable_baselines3 import PPO
     from stable_baselines3.common.callbacks import BaseCallback
     from stable_baselines3.common.vec_env import SubprocVecEnv, VecEnvWrapper, VecNormalize
@@ -226,7 +230,7 @@ def main():
     else:
         model = PPO(
             "MlpPolicy", venv, device="cpu", seed=args.seed,
-            n_steps=512, batch_size=512, n_epochs=6, learning_rate=LEARNING_RATE, target_kl=TARGET_KL,
+            n_steps=512, batch_size=512, n_epochs=args.n_epochs, learning_rate=LEARNING_RATE, target_kl=TARGET_KL,
             gamma=0.99, gae_lambda=0.95, clip_range=0.2, ent_coef=0.002,
             vf_coef=0.5, max_grad_norm=0.5,
             policy_kwargs=dict(net_arch=dict(pi=[256, 256], vf=[256, 256]), log_std_init=-1.0),

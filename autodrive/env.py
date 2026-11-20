@@ -311,8 +311,8 @@ class AutoDriveEnv(gym.Env):
             objs.append(np.array([p.pos for p in self.peds.peds]))
         if objs:
             P = np.concatenate(objs)
-            dd = np.linalg.norm(ahead[:, None, :] - P[None, :, :], axis=2)
-            if (dd < 2.5).any():
+            dd = ahead[:, None, :] - P[None, :, :]
+            if ((dd[..., 0] ** 2 + dd[..., 1] ** 2) < 2.5 ** 2).any():
                 return True
         # waiting at an intersection because of cross traffic counts too
         return False
@@ -340,7 +340,8 @@ class AutoDriveEnv(gym.Env):
         self._scan()
         box = car.box
         # --- collisions -------------------------------------------------------
-        near = self.static_boxes[np.linalg.norm(self.static_boxes[:, :2] - car.pos, axis=1) < 40] \
+        sd = self.static_boxes[:, :2] - car.pos if len(self.static_boxes) else None
+        near = self.static_boxes[sd[:, 0] ** 2 + sd[:, 1] ** 2 < 40 ** 2] \
             if len(self.static_boxes) else self.static_boxes
         coll = bool(obb_overlap_many(box, near).any()) if len(near) else False
         if len(self.npc_boxes):

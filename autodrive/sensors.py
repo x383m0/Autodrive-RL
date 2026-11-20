@@ -110,7 +110,8 @@ class SensorSuite:
         def keep(arr, extra):
             if len(arr) == 0:
                 return np.zeros(0, dtype=bool)
-            return np.linalg.norm(arr[:, :2] - me, axis=1) < R + extra
+            d = arr[:, :2] - me
+            return d[:, 0] ** 2 + d[:, 1] ** 2 < (R + extra) ** 2
 
         sb = static_boxes[keep(static_boxes, 30.0)] if len(static_boxes) else static_boxes   # buildings can be big
         kv = keep(vehicle_boxes, 3.0)
