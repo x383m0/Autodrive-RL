@@ -42,6 +42,10 @@ def _park_lessons(bands, advance=0.6):
 
 
 _ROAD = dict(world="road", lot_occ=0.3)
+# level 6+: well-behaved traffic and pedestrians (no rushers/erratic drivers,
+# no jaywalkers, no kids running out); level 7 turns these on
+_CALM = dict(reckless=0.0, hard_brake=0.0, jaywalk=0.0, n_kids=0)
+_RUSH = dict(hops=(1, 3), controls=True, parked=0.3, school=0.2, n_cars=8, n_peds=14, **_CALM)
 _PAD = dict(world="road", pad_only=True, lot_occ=0.4)      # level 1: just a parking pad
 
 # Built-in rewards available in a level. Most are there from level 1; rewards
@@ -96,9 +100,22 @@ LEVELS = [
          + [_stage("empty streets", hops=(0, 1), parked=0.3),
             _stage("rules", hops=(1, 3), controls=True, parked=0.3, school=0.2)],
          test=_stage("Rules of the road (test)", hops=(1, 3), controls=True, parked=0.3, school=0.2)),
+    dict(id=6, name="Rush hour", available=True, score="speed", rules=True, minutes=25,
+         brief="Other cars and people on the sidewalks and crosswalks. Everyone behaves - "
+               "no reckless drivers, no jaywalkers - but a crash or a hit pedestrian ends the drive.",
+         terms=TERMS_6, stars=(450, 600, 750),
+         curriculum=_park_lessons([(1, 6), (4, 15), (12, 30), (25, 70)])
+         + [_stage("empty streets", hops=(0, 1), parked=0.3),
+            _stage("rules", hops=(1, 3), controls=True, parked=0.3, school=0.2),
+            _stage("light traffic", hops=(1, 3), controls=True, parked=0.3, school=0.2, n_cars=3, **_CALM),
+            _stage("traffic", hops=(1, 3), controls=True, parked=0.3, school=0.2, n_cars=6, **_CALM),
+            _stage("people on the sidewalks", hops=(1, 3), controls=True, parked=0.3, school=0.2,
+                   n_cars=6, n_peds=10, **_CALM),
+            _stage("rush hour", **_RUSH)],
+         # starting from your level 5 car: it already parks and knows the rules
+         prev_start=6,
+         test=_stage("Rush hour (test)", **_RUSH)),
     # ---- not playable yet (see GAME_DESIGN.md build order) -------------------------
-    dict(id=6, name="Rush hour", available=False, score="speed", rules=True, minutes=20,
-         brief="Normal pedestrians and normal traffic.", terms=TERMS_6, stars=(500, 650, 800)),
     dict(id=7, name="Chaos", available=False, score="speed", rules=True, minutes=25,
          brief="Jaywalkers and reckless drivers.", terms=TERMS_6, stars=(500, 650, 800)),
     dict(id=8, name="Heavy traffic", available=False, score="speed", rules=True, minutes=25,

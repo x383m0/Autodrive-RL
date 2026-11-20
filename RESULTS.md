@@ -145,7 +145,8 @@ rather than a single reward bug, and it is the main open issue.
 
 ## Assets
 
-Real (downloaded, CC0 Kenney): all car/pedestrian/tree/skid sprites; engine,
+Drawn in code: cars (`autodrive/carart.py`) and pedestrians (`autodrive/pedart.py`).
+Real (downloaded, CC0 Kenney): tree and skid sprites; engine,
 crash (metal + glass), pedestrian thud, turn-signal tick, light-change ping,
 parking chime, wind. Synthesised (`tools/make_sounds.py`): horn, brake squeal,
 city ambience. kenney.nl, Freesound, Pixabay, Mixkit and OpenGameArt were

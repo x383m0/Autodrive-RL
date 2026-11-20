@@ -92,12 +92,13 @@ class NPCCar:
 
 
 class TrafficManager:
-    def __init__(self, city: City, rng, n_cars: int, hard_brake_scale=1.0):
+    def __init__(self, city: City, rng, n_cars: int, hard_brake_scale=1.0, reckless=1.0):
         self.city = city
         self.rng = rng
         self.n_cars = n_cars
         self.cars: list[NPCCar] = []
         self.hard_brake_scale = hard_brake_scale
+        self.reckless = reckless      # 0 = only calm/normal/timid drivers, 1 = the full mix
         self.events = []          # sound/visual events emitted this step
 
     # ---------------------------------------------------------------- spawn
@@ -127,11 +128,16 @@ class TrafficManager:
             if any(np.linalg.norm(pos - c.pos) < 9.0 for c in self.cars):
                 if path is None:
                     continue
-            name = personality or rng.choice(list(PERSONALITY_P), p=list(PERSONALITY_P.values()))
+            if personality:
+                name = personality
+            else:
+                pp = {k: v * (self.reckless if k in ("rusher", "erratic") else 1.0) for k, v in PERSONALITY_P.items()}
+                tot = sum(pp.values())
+                name = rng.choice(list(pp), p=[v / tot for v in pp.values()])
             if name == "erratic" and self.hard_brake_scale == 0:
                 name = "normal"
             vv = v if v is not None else 0.7 * p.limit(ss)
-            car = NPCCar(p, ss, vv, name, int(rng.integers(0, 11)), rng)
+            car = NPCCar(p, ss, vv, name, int(rng.integers(0, 1 << 16)), rng)   # any model of the fleet
             self.cars.append(car)
             return car
         return None

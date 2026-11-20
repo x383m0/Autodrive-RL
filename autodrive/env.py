@@ -160,7 +160,8 @@ class AutoDriveEnv(gym.Env):
         th = float(self.route.heading(s0 + 0.5))
         v0 = float(p.get("v0", rng.uniform(0, 0.6) * self.route.limit(s0)))
         self.car = BicycleCar(p0[0], p0[1], th, v0)
-        self.traffic = TrafficManager(self.city, rng, p["n_cars"], hard_brake_scale=p["hard_brake"])
+        self.traffic = TrafficManager(self.city, rng, p["n_cars"], hard_brake_scale=p["hard_brake"],
+                                      reckless=float(p.get("reckless", 1.0)))
         self.peds = PedestrianManager(self.city, rng, p["n_peds"], jaywalk_prob=p["jaywalk"],
                                       n_kids=p["n_kids"])
 

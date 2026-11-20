@@ -288,7 +288,10 @@ class Game:
             if src is not None:
                 cmd += ["--init-from", str(src)]
                 meta = _load(src / "meta.json", {})
-                if meta.get("level", lid) == lid:
+                if start_from == "prev" and lv.get("prev_start"):
+                    # a car from the previous level skips the lessons it already knows
+                    cmd += ["--start-stage", str(lv["prev_start"])]
+                elif meta.get("level", lid) == lid:
                     self.base_minutes = float(meta.get("minutes_total", 0.0))
                     try:
                         k = int(json.load(open(src / "curriculum.json"))["stage"])
