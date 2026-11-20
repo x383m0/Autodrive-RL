@@ -108,8 +108,12 @@ entry in `autodrive/levels.py`:
 | 4 Into town | 14 min | 784 | 2 | 10 parked, 2 stuck (10 min gave 580 = barely 1 star) |
 | 5 Rules of the road | 15 min | 668 | 2 | 9 parked, 1 stuck, 1 off route, 1 collision |
 
-Every level is winnable in its default time with a sensible reward; a
-well-designed reward should reach 3 stars.
+| 6 Rush hour | 20 min from the level-5 car | 484 | 1 | 7 parked, 3 collisions, 1 pedestrian, 1 stuck |
+| 6 Rush hour | 25 min, new car | 399 | 0 | 5 parked, 4 collisions, 2 stuck, 1 pedestrian |
+
+Levels 1-5 are winnable in their default time with a sensible reward; a
+well-designed reward should reach 3 stars. Level 6 is won by continuing from
+the level-5 car (preselected in "Start from"); a new car falls just short.
 - The level's curriculum runs automatically behind the scenes (e.g. starting
   close to the spot first); the player only designs the reward.
 - **Start from**: a new car, *continue my last car here*, *continue my best car
