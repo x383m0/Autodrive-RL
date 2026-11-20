@@ -97,6 +97,19 @@ entry in `autodrive/levels.py`:
   reaches the full road in ~4.5 min and parks ~87% of practice drives by
   8 min; level 3 reaches the full road at ~6.5 min and parks ~77% by 12 min.
   Default training times: 8 and 10 min.
+
+### Balance check (balanced reward, default time, the game's hidden 12-drive test, one run each)
+
+| Level | Default time | Test score | Stars | Test drives |
+|---|---|---|---|---|
+| 1 Park here | 3 min | 908 | 3 | 11 parked, 1 off route |
+| 2 Straight road | 8 min | 853 | 3 | 11 parked, 1 stuck |
+| 3 Bends | 10 min | 813 | 2 | 10 parked, 2 collisions |
+| 4 Into town | 14 min | 784 | 2 | 10 parked, 2 stuck (10 min gave 580 = barely 1 star) |
+| 5 Rules of the road | 15 min | 668 | 2 | 9 parked, 1 stuck, 1 off route, 1 collision |
+
+Every level is winnable in its default time with a sensible reward; a
+well-designed reward should reach 3 stars.
 - The level's curriculum runs automatically behind the scenes (e.g. starting
   close to the spot first); the player only designs the reward.
 - **Start from**: a new car, *continue my last car here*, *continue my best car
