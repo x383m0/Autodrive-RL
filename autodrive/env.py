@@ -152,6 +152,8 @@ class AutoDriveEnv(gym.Env):
             if p.get("world") == "road" and not p.get("pad_only"):
                 # single-road levels: always start ON the road, facing the pad
                 s0 = min(s0, max(0.0, self.route.in_lot_s - 4.0))
+        if s0 == 0.0 and p.get("world") == "road" and not p.get("pad_only"):
+            s0 = 3.0                  # whole car on the road at the start (not hanging off its end)
         p0 = self.route.pos(s0)
         th = float(self.route.heading(s0 + 0.5))
         v0 = float(p.get("v0", rng.uniform(0, 0.6) * self.route.limit(s0)))
