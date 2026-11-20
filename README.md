@@ -60,7 +60,8 @@ python compare.py balanced cautious
 
 `watch.py` runs the car in a fresh random city after each other and streams
 it to a web page on your own computer, with sound (click **Sound on**),
-pause / speed / next-city / stage buttons, sensor and HUD toggles, and live
+pause / speed / next-city / stage buttons, zoom (-/+ or scroll on the
+picture), sensor and HUD toggles, and live
 statistics. Nothing is saved to disk.
 
 ```bash
