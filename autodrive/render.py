@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import math
 import os
+import time
 from pathlib import Path
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -44,7 +45,9 @@ from .vehicle import LENGTH, WIDTH
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
 W, H = 1280, 720
 PPM = 9.0                      # pixels per metre at zoom 1
-MAX_STATIC_PX = 4096           # largest pre-rendered city image (memory); beyond this, zoom scales
+MAX_STATIC_PX = 16000          # longest side of the pre-rendered ground image
+MAX_STATIC_AREA = 40e6         # its pixel budget (24-bit: ~120 MB); past it, zoom scales the picture
+ZOOM_SETTLE_S = 0.3            # while the zoom keeps changing, stretch the old image; redraw once it settles
 MARGIN = 30.0                  # metres of scenery around the city
 
 # ---- palette (one cohesive, slightly desaturated look) ---------------------
@@ -92,12 +95,13 @@ class Renderer:
         self.screen = self.final                           # current drawing target
         self.ppm = PPM                                     # pixels per metre actually used for the world
         self.zoom = 1.0                                    # requested zoom (1 = default view)
+        self._zoom_t = 0.0                                 # when the zoom last changed
         self._full = (width, height)
         self.show_hud = show_hud
         self.show_sensors = show_sensors
-        self.fonts = {k: _font(*v) for k, v in dict(
-            tiny=(12,), small=(14,), med=(17,), medb=(17, True), big=(40, True), huge=(54, True),
-            title=(13, True)).items()}
+        self.fonts = {k: _font(*v) for k, v in self.FONT_SIZES.items()}
+        self.hk = None
+        self._set_hud_scale()
         self._load_sprites()
         self.city_id = None
         self.cam = None
@@ -127,9 +131,33 @@ class Renderer:
         pygame.draw.rect(s, (30, 34, 40), (12, 86, 46, 18), border_radius=6)
         return s
 
+    FONT_SIZES = dict(tiny=(12,), small=(14,), med=(17,), medb=(17, True), big=(40, True), huge=(54, True),
+                      title=(13, True))
+
+    def _set_hud_scale(self):
+        k = round(self._full[1] / 720.0, 3)
+        if k != self.hk:
+            self.hk = k
+            self.hfonts = {n: _font(max(6, int(round(sz * k))), *rest) for n, (sz, *rest) in self.FONT_SIZES.items()}
+            self.text_cache = {}
+        self.LW, self.LH = self._full[0] / k, 720.0
+
+    def set_output_size(self, w, h):
+        """Render frames at w x h pixels (e.g. the viewer's real screen size)."""
+        w, h = int(np.clip(w, 480, 2560)) // 2 * 2, int(np.clip(h, 270, 1440)) // 2 * 2
+        if (w, h) != self._full:
+            self._full = (w, h)
+            self.final = pygame.Surface((w, h))
+            self._world_size = None
+            self._set_hud_scale()
+        return self._full
+
     def set_zoom(self, z):
         """Zoom the live view (0.5 = see more, 3 = close up). Takes effect next frame."""
-        self.zoom = float(np.clip(z, 0.5, 3.0))
+        z = float(np.clip(z, 0.5, 3.0))
+        if z != self.zoom:
+            self.zoom = z
+            self._zoom_t = time.time()
         return self.zoom
 
     def _use_ppm(self, ppm):
@@ -209,7 +237,7 @@ class Renderer:
             return self._build_static_road(env)
         Wm = city.width + 2 * MARGIN
         Hm = city.height + 2 * MARGIN
-        S = pygame.Surface((int(Wm * self.ppm), int(Hm * self.ppm)))
+        S = pygame.Surface((int(Wm * self.ppm), int(Hm * self.ppm)), 0, 24)
         rng = np.random.default_rng(city.nx * 1000 + int(city.width))
         S.fill(C["grass"])
         # grass texture
@@ -359,7 +387,7 @@ class Renderer:
         from .worlds import ROAD_HALF
         city = env.city
         Wm, Hm = city.width + 2 * MARGIN, city.height + 2 * MARGIN
-        S = pygame.Surface((int(Wm * self.ppm), int(Hm * self.ppm)))
+        S = pygame.Surface((int(Wm * self.ppm), int(Hm * self.ppm)), 0, 24)
         rng = np.random.default_rng(int(city.width * 7))
         S.fill(C["grass"])
         for _ in range(int(Wm * Hm / 6)):
@@ -423,7 +451,7 @@ class Renderer:
             span = max(hi[0] - lo[0], (hi[1] - lo[1]) * 1.3)      # a pleasant ~4:3 frame
             mid = (lo + hi) / 2
             lo, hi = mid - np.array([span / 2, span / 2.6]), mid + np.array([span / 2, span / 2.6])
-            ppm = min(max_w / span, max_h / (span / 1.3), MAX_STATIC_PX / (max(city.width, city.height) + 2 * MARGIN))
+            ppm = min(max_w / span, max_h / (span / 1.3), self._ppm_cap(env))
         else:
             ppm = min(max_w / (city.width + 2 * MARGIN), max_h / (city.height + 2 * MARGIN))
         old = self.ppm
@@ -720,10 +748,20 @@ class Renderer:
         """Drawing scale for the world: the zoom, capped by the static image size."""
         Wm = env.city.width + 2 * MARGIN
         Hm = env.city.height + 2 * MARGIN
-        return min(PPM * self.zoom, MAX_STATIC_PX / max(Wm, Hm))
+        return min(PPM * self.zoom, self._ppm_cap(env))
+
+    @staticmethod
+    def _ppm_cap(env):
+        """Largest scale whose ground image still fits the memory budget."""
+        Wm = env.city.width + 2 * MARGIN
+        Hm = env.city.height + 2 * MARGIN
+        return min(MAX_STATIC_PX / max(Wm, Hm), math.sqrt(MAX_STATIC_AREA / (Wm * Hm)))
 
     def draw(self, env, alpha=1.0, dt=0.1):
         ppm = self._world_ppm(env)
+        if (self.city_id is not None and self.city_id[:2] == (env.city_seed, id(env.city))
+                and time.time() - self._zoom_t < ZOOM_SETTLE_S):
+            ppm = self.city_id[2]                 # zooming right now: reuse the image, redraw when it stops
         f = PPM * self.zoom / ppm                # >1 only when zoomed past the static-size cap
         Wf, Hf = self._full
         wW, wH = max(int(Wf / f), 64), max(int(Hf / f), 36)
@@ -739,11 +777,10 @@ class Renderer:
             self.city_id = key
             self._use_ppm(ppm)
             self.static = self._build_static(env)
+            self.ground = self.static              # skid marks are drawn straight into it
             if same_city:                         # zoom change: keep camera/particles
-                self.ground = self.static.copy()
                 self.last_skid = None
                 return self._finish(env)
-            self.ground = self.static.copy()
             self.cam = None
             self.particles = []
             self.prev_pose, self.cur_pose = {}, {}
@@ -996,21 +1033,46 @@ class Renderer:
                 self.screen.blit(g, (q[0] - 12, q[1] - 12), special_flags=pygame.BLEND_RGBA_ADD)
 
     # ------------------------------------------------------------ HUD
+    # The HUD is laid out in "logical" pixels of a 720-pixel-high screen and
+    # drawn at k = output height / 720, so it stays sharp at any output size.
+    def _k(self, v):
+        return int(round(v * self.hk))
+
+    def _kp(self, p):
+        return (self._k(p[0]), self._k(p[1]))
+
+    def _kr(self, r):
+        r = pygame.Rect(r)
+        return pygame.Rect(self._k(r.x), self._k(r.y), max(1, self._k(r.w)), max(1, self._k(r.h)))
+
+    def _circle(self, col, c, r, w=0):
+        pygame.draw.circle(self.screen, col, self._kp(c), max(1, self._k(r)), self._k(w) if w else 0)
+
+    def _line(self, col, a, b, w=1):
+        pygame.draw.line(self.screen, col, self._kp(a), self._kp(b), max(1, self._k(w)))
+
+    def _lines(self, col, closed, pts, w=1):
+        pygame.draw.lines(self.screen, col, closed, [self._kp(p) for p in pts], max(1, self._k(w)))
+
+    def _rect(self, col, r, w=0, border_radius=0):
+        pygame.draw.rect(self.screen, col, self._kr(r), self._k(w) if w else 0, border_radius=self._k(border_radius))
+
     def _panel(self, rect, alpha=200):
+        rect = self._kr(rect)
         s = pygame.Surface(rect.size, pygame.SRCALPHA)
-        pygame.draw.rect(s, (16, 18, 24, alpha), s.get_rect(), border_radius=12)
-        pygame.draw.rect(s, (255, 255, 255, 25), s.get_rect(), 1, border_radius=12)
+        pygame.draw.rect(s, (16, 18, 24, alpha), s.get_rect(), border_radius=self._k(12))
+        pygame.draw.rect(s, (255, 255, 255, 25), s.get_rect(), 1, border_radius=self._k(12))
         self.screen.blit(s, rect.topleft)
 
     def _text(self, txt, pos, font="small", color=None, anchor="topleft"):
-        key = (txt, font, color)
+        key = (txt, font, color, self.hk)
         img = self.text_cache.get(key)
         if img is None:
-            img = self.fonts[font].render(txt, True, color or C["hud_fg"])
+            img = self.hfonts[font].render(txt, True, color or C["hud_fg"])
             if len(self.text_cache) > 3000:
                 self.text_cache.clear()
             self.text_cache[key] = img
-        r = img.get_rect(**{anchor: pos})
+        r = img.get_rect(**{anchor: self._kp(pos)})
         self.screen.blit(img, r)
         return r
 
@@ -1027,12 +1089,12 @@ class Renderer:
         # limit sign
         cx, cy = 210, 58
         if limit <= 60:
-            pygame.draw.circle(self.screen, (250, 250, 248), (cx, cy), 30)
-            pygame.draw.circle(self.screen, (210, 40, 40), (cx, cy), 30, 5)
+            self._circle((250, 250, 248), (cx, cy), 30)
+            self._circle((210, 40, 40), (cx, cy), 30, 5)
             self._text(f"{limit:.0f}", (cx, cy), "medb", (20, 20, 20), anchor="center")
         else:                                   # game levels: no speed limit here
-            pygame.draw.circle(self.screen, (250, 250, 248), (cx, cy), 30)
-            pygame.draw.line(self.screen, (40, 40, 40), (cx - 19, cy + 19), (cx + 19, cy - 19), 4)
+            self._circle((250, 250, 248), (cx, cy), 30)
+            self._line((40, 40, 40), (cx - 19, cy + 19), (cx + 19, cy - 19), 4)
             self._text("NO LIMIT", (cx, cy + 40), "title", C["hud_dim"], anchor="center")
         school = env.route.school[min(env.route_idx, len(env.route.school) - 1)]
         if school:
@@ -1046,10 +1108,10 @@ class Renderer:
             if ev["kind"] == "light":
                 st = env.city.light_state(ev["node"], ev["axis"], env.t)
                 col = {"R": (255, 60, 50), "Y": (255, 200, 40), "G": (70, 220, 110)}[st]
-                pygame.draw.circle(self.screen, col, (40, y + 10), 9)
+                self._circle(col, (40, y + 10), 9)
                 self._text(f"Light {dist:4.0f} m", (58, y + 1), "med")
             else:
-                pygame.draw.circle(self.screen, (200, 30, 36), (40, y + 10), 9)
+                self._circle((200, 30, 36), (40, y + 10), 9)
                 done = env.stop_min_speed.get(i, 99) <= 0.5
                 self._text(f"Stop {dist:4.0f} m" + ("  done" if done else ""), (58, y + 1), "med")
         else:
@@ -1067,7 +1129,7 @@ class Renderer:
         # ---------- right: reward breakdown ----------
         enabled = active_names(env.reward_cfg)          # built-in + custom rewards in use
         ph = 64 + 19 * len(enabled)
-        x0 = self.W - 314
+        x0 = self.LW - 314
         self._panel(pygame.Rect(x0, 14, 300, ph))
         self._text("REWARD", (x0 + 16, 24), "title", C["hud_dim"])
         self._text(f"{env.ep_return:+8.2f}", (x0 + 284, 20), "medb",
@@ -1084,9 +1146,9 @@ class Renderer:
             bw = int(70 * abs(v) / vmax)
             col = C["pos"] if v >= 0 else C["neg"]
             bx = x0 + 160
-            pygame.draw.rect(self.screen, (50, 54, 62), (bx, yy + 4, 70, 8), border_radius=3)
+            self._rect((50, 54, 62), (bx, yy + 4, 70, 8), border_radius=3)
             if bw > 0:
-                pygame.draw.rect(self.screen, col, (bx, yy + 4, bw, 8), border_radius=3)
+                self._rect(col, (bx, yy + 4, bw, 8), border_radius=3)
             self._text(f"{v:+.1f}", (x0 + 284, yy), "tiny", col if abs(v) > 1e-6 else C["hud_dim"],
                        anchor="topright")
 
@@ -1099,39 +1161,40 @@ class Renderer:
                         "pedestrian_hit": ("PEDESTRIAN HIT", C["neg"]),
                         "off_route": ("OFF ROUTE", (255, 170, 60)), "stuck": ("STUCK", (255, 170, 60)),
                         "timeout": ("TIME OUT", (255, 170, 60))}.get(st, (st.upper(), C["hud_fg"]))
-            img = f["big"].render(msg, True, col)
-            r = img.get_rect(center=(self.W // 2, 80))
+            tw, th = self.fonts["big"].size(msg)            # logical size of the text
+            r = pygame.Rect(0, 0, tw, th)
+            r.center = (self.LW // 2, 80)
             self._panel(r.inflate(40, 20), 210)
-            self.screen.blit(img, r)
-        self._text("AUTODRIVE-RL", (16, self.H - 24), "title", (255, 255, 255, 120))
+            self._text(msg, r.center, "big", col, anchor="center")
+        self._text("AUTODRIVE-RL", (16, self.LH - 24), "title", (255, 255, 255, 120))
 
     def _bar(self, x, y, w, h, v, col, centered=False):
-        pygame.draw.rect(self.screen, (50, 54, 62), (x, y, w, h), border_radius=4)
+        self._rect((50, 54, 62), (x, y, w, h), border_radius=4)
         v = float(np.clip(v, -1, 1))
         if centered:
             mid = x + w // 2
             bw = int(abs(v) * w / 2)
             rx = mid if v >= 0 else mid - bw
-            pygame.draw.rect(self.screen, col, (rx, y, bw, h), border_radius=4)
-            pygame.draw.line(self.screen, (200, 200, 200), (mid, y - 2), (mid, y + h + 1), 1)
+            self._rect(col, (rx, y, bw, h), border_radius=4)
+            self._line((200, 200, 200), (mid, y - 2), (mid, y + h + 1), 1)
 
     def _minimap(self, env):
         city = env.city
         size = 190
         sc = size / (max(city.width, city.height) + 40)
-        x0, y0 = self.W - size - 16, self.H - size - 16
+        x0, y0 = self.LW - size - 16, self.LH - size - 16
         self._panel(pygame.Rect(x0 - 6, y0 - 6, size + 12, size + 12), 190)
 
         def mp(p):
             return (int(x0 + (p[0] + 20) * sc), int(y0 + (p[1] + 20) * sc))
         for x in city.xs:
-            pygame.draw.line(self.screen, (90, 95, 105), mp((x, 0)), mp((x, city.height)), 3)
+            self._line((90, 95, 105), mp((x, 0)), mp((x, city.height)), 3)
         for y in city.ys:
-            pygame.draw.line(self.screen, (90, 95, 105), mp((0, y)), mp((city.width, y)), 3)
+            self._line((90, 95, 105), mp((0, y)), mp((city.width, y)), 3)
         pts = env.route.pts[::6]
         if len(pts) > 1:
-            pygame.draw.lines(self.screen, C["route"], False, [mp(p) for p in pts], 2)
+            self._lines(C["route"], False, [mp(p) for p in pts], 2)
         for c in env.traffic.cars:
-            pygame.draw.circle(self.screen, (230, 200, 70), mp(c.pos), 2)
-        pygame.draw.circle(self.screen, C["target"], mp(env.slot["center"]), 4)
-        pygame.draw.circle(self.screen, (255, 255, 255), mp(env.car.pos), 4)
+            self._circle((230, 200, 70), mp(c.pos), 2)
+        self._circle(C["target"], mp(env.slot["center"]), 4)
+        self._circle((255, 255, 255), mp(env.car.pos), 4)

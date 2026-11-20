@@ -62,6 +62,10 @@ for passing score thresholds; 1 star unlocks the next level.
 - Zoom: the level map zooms (scroll, -/+ buttons, double-click; up to 300%)
   and pans by dragging. The live view zooms 50-300% (scroll on the picture or
   the -/+ buttons, also in fullscreen); the server renders the zoom, so it stays sharp.
+- The live view is rendered at the viewer's real pixel size (fullscreen = the
+  screen size, up to 2560x1440), so nothing is a stretched picture. While the
+  zoom is changing the old frame is scaled for a moment, then the ground is
+  redrawn at the new scale.
 - "Stop and test now" asks training to stop through a `STOP` file in the run
   folder, so the car is saved on every OS (Windows included). If training was
   killed anyway, the last checkpoint is tested.

@@ -163,6 +163,7 @@ def hints(level, cfg, result, train_rows):
 # =====================================================================
 class Game:
     def __init__(self, fps, quality):
+        self.view_opts = {}                  # last zoom / screen size sent by the page
         self.fps, self.quality = fps, quality
         self.progress = _load(PROGRESS, {})
         self.library = _load(LIBRARY, [])
@@ -188,8 +189,8 @@ class Game:
         old = self.sp
         sp = Spectator(Path(exp), stage, follow, self.quality, int(time.time()) % 10_000, self.fps,
                        stages=stages, allow_untrained=True)
-        if old is not None:                  # keep the player's zoom across runs
-            sp.zoom = sp.env.renderer.set_zoom(old.zoom)
+        for q in self.view_opts.values():    # keep the player's zoom and screen size across runs
+            sp.control(q)
         threading.Thread(target=sp.run, daemon=True).start()
         self.sp = sp
         if old is not None:
@@ -500,6 +501,9 @@ def make_handler(game: Game):
                 elif u.path == "/api/preview.png":
                     self._send(200, game.preview_png(int(q.get("level", ["1"])[0])), "image/png")
                 elif u.path == "/control":
+                    cmd = q.get("cmd", [""])[0]
+                    if cmd in ("zoom", "size"):          # remembered for every later live view
+                        game.view_opts[cmd] = q
                     self._json(game.sp.control(q) if game.sp else {})
                 elif u.path == "/stream.mjpg":
                     self._mjpeg()

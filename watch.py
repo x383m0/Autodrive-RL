@@ -86,6 +86,7 @@ class Spectator:
         self.event_id = 0
         self.paused = False
         self.zoom = 1.0
+        self.size = (1280, 720)
         self.watchers = 0                     # open video streams; nobody watching = no rendering
         self.speed = 1.0
         self.request_new = False
@@ -283,6 +284,9 @@ class Spectator:
             self.env.renderer.show_hud = not self.env.renderer.show_hud
         elif cmd == "zoom":
             self.zoom = self.env.renderer.set_zoom(float(q.get("v", ["1"])[0]))
+        elif cmd == "size":                    # the viewer's real pixel size: render at it (sharp)
+            self.size = self.env.renderer.set_output_size(int(float(q.get("w", ["1280"])[0])),
+                                                          int(float(q.get("h", ["720"])[0])))
         return {"paused": self.paused, "speed": self.speed, "stage": self.stage, "zoom": self.zoom,
                 "sensors": self.env.renderer.show_sensors, "hud": self.env.renderer.show_hud}
 
@@ -364,6 +368,15 @@ const ctl = (q) => fetch('/control?' + q).then(r => r.json()).then(s => {
 ctl('');   // read the current settings when the page opens
 $('pause').onclick = () => ctl('cmd=pause');
 $('next').onclick = () => ctl('cmd=next');
+// render at the real on-screen pixel size (sharp on big / high-DPI screens)
+function sendSize() {
+  const v = $('view'), d = window.devicePixelRatio || 1;
+  const w = Math.round(v.clientWidth * d), h = Math.round(w * 9 / 16);
+  if (w > 0) ctl('cmd=size&w=' + w + '&h=' + h);
+}
+let sizeT = null;
+window.addEventListener('resize', () => { clearTimeout(sizeT); sizeT = setTimeout(sendSize, 300); });
+setTimeout(sendSize, 500);
 let Z = 1;
 function zoom(z) { Z = Math.min(3, Math.max(0.5, Math.round(z * 100) / 100)); $('zl').textContent = Math.round(Z * 100) + '%'; ctl('cmd=zoom&v=' + Z); }
 $('zin').onclick = () => zoom(Z * 1.25); $('zout').onclick = () => zoom(Z / 1.25); $('zl').onclick = () => zoom(1);

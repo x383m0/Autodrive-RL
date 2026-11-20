@@ -528,6 +528,20 @@ $('mapWrap').addEventListener('dblclick', e => { const r = $('mapWrap').getBound
 // ---------------- fullscreen ----------------
 $('fsBtn').onclick = () => $('liveCard').requestFullscreen && $('liveCard').requestFullscreen();
 $('fsExit').onclick = () => document.exitFullscreen();
+// render at the real on-screen pixel size: sharp in fullscreen and on high-DPI screens
+let SZ = '';
+function sendSize() {
+  const d = window.devicePixelRatio || 1, fs = document.fullscreenElement === $('liveCard');
+  let w, h;
+  if (fs) { w = screen.width * d; h = screen.height * d; }
+  else { w = $('view').clientWidth * d; h = w * 9 / 16; }
+  if (!w) return;
+  const q = 'w=' + Math.round(w) + '&h=' + Math.round(h);
+  if (q !== SZ) { SZ = q; fetch('/control?cmd=size&' + q); }
+}
+let sizeT = null;
+window.addEventListener('resize', () => { clearTimeout(sizeT); sizeT = setTimeout(sendSize, 250); });
+document.addEventListener('fullscreenchange', () => setTimeout(sendSize, 100));
 document.addEventListener('fullscreenchange', () => {
   const fs = document.fullscreenElement === $('liveCard');
   $('fsExit').hidden = !fs; $('trainBox').hidden = !(STATE && (STATE.phase === 'training' || STATE.phase === 'testing'));
@@ -548,7 +562,7 @@ function drawChart(curve, minutes) {
 }
 function setLive(on) {
   $('liveCard').hidden = !on; $('mapCard').hidden = on;      // the map until the first training
-  if (on && !$('view').src.includes('stream')) $('view').src = '/stream.mjpg';
+  if (on && !$('view').src.includes('stream')) { $('view').src = '/stream.mjpg'; SZ = ''; setTimeout(sendSize, 300); }
   if (!on && $('view').src) $('view').removeAttribute('src');      // stop streaming = no rendering
 }
 function renderState() {
