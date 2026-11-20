@@ -92,8 +92,11 @@ def _save(path, data):
     tmp.replace(path)
 
 
+DEBUG = False                # --debug: every built level is open, no stars needed
+
+
 def unlocked(progress, lid):
-    return lid == 1 or progress.get(str(lid - 1), {}).get("stars", 0) >= 1
+    return DEBUG or lid == 1 or progress.get(str(lid - 1), {}).get("stars", 0) >= 1
 
 
 # =====================================================================
@@ -373,6 +376,7 @@ def read_progress(run):
 def catalog():
     """Everything the page needs to build the workshop (no default numbers)."""
     return {
+        "debug": DEBUG,
         "levels": [{"id": lv["id"], "name": lv["name"], "brief": lv["brief"], "available": lv["available"],
                     "terms": lv["terms"],
                     "new_terms": [t for t in lv["terms"] if lv["id"] > 1 and t not in BY_ID[lv["id"] - 1]["terms"]],
@@ -529,12 +533,17 @@ def main():
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--quality", type=int, default=90)
+    ap.add_argument("--debug", action="store_true",
+                    help="debug mode: unlock every level to try it (progress is still saved)")
     args = ap.parse_args()
+    global DEBUG
+    DEBUG = args.debug
     RUNS.mkdir(parents=True, exist_ok=True)
     game = Game(args.fps, args.quality)
     srv = ThreadingHTTPServer((args.host, args.port), make_handler(game))
     srv.daemon_threads = True
-    print(f"[game] Reward Designer running: open http://localhost:{args.port}   (Ctrl+C to quit)")
+    print(f"[game] Reward Designer running: open http://localhost:{args.port}   (Ctrl+C to quit)"
+          + ("\n[game] DEBUG MODE: all levels unlocked" if DEBUG else ""))
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

@@ -89,6 +89,9 @@ entry in `autodrive/levels.py`:
 ## Training
 
 - The player chooses the training time.
+- `python game.py --debug` unlocks every built level (for testing); progress is still saved.
+- Single-road levels (2-3): the "start near the spot" practice stages always
+  start on the road a few metres before the pad, facing it.
 - The level's curriculum runs automatically behind the scenes (e.g. starting
   close to the spot first); the player only designs the reward.
 - Optional: start from your best car of the previous level.

@@ -21,6 +21,12 @@ CPU only.
 python game.py          # then open http://localhost:8000
 ```
 
+Debug mode (every built level unlocked, to try them without earning stars):
+
+```bash
+python game.py --debug
+```
+
 Each level starts with an **empty reward**. Press **+ Add reward** to pick
 built-in rewards (each with a plain-English explanation, no suggested
 numbers) and type how many points each one gives - positive to encourage,

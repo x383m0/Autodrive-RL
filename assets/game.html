@@ -115,6 +115,9 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .stepper button svg { width:12px; height:12px; display:block; }
 .tag.new { color:#06121f; background:var(--gold); border-color:var(--gold); font-weight:700; }
 .preview { width:100%; border-radius:10px; border:1px solid var(--line); display:block; }
+.debugtag { margin-left:auto; margin-right:10px; font-size:12px; font-weight:700; letter-spacing:.04em; color:#f0a43c;
+            border:1px solid #f0a43c; border-radius:999px; padding:3px 10px; }
+.debugtag + .total { margin-left:0; }
 .zoomctl { display:inline-flex; align-items:center; gap:0; }
 .zoomctl .zl { min-width:46px; text-align:center; font-size:12px; color:var(--fg); font-variant-numeric:tabular-nums; cursor:pointer; }
 .mapwrap { position:relative; overflow:hidden; border-radius:10px; border:1px solid var(--line); margin-top:8px; cursor:grab; touch-action:none; }
@@ -264,7 +267,7 @@ function addSteppers(root) {
 new MutationObserver(() => addSteppers()).observe(document.body, {childList:true, subtree:true});
 
 // ---------------- levels ----------------
-function unlocked(id) { return id === 1 || (prog(id - 1).stars || 0) >= 1; }
+function unlocked(id) { return (CAT && CAT.debug) || id === 1 || (prog(id - 1).stars || 0) >= 1; }
 function renderLevels() {
   const nav = $('levels'); nav.innerHTML = ''; let total = 0;
   for (const lv of CAT.levels) {
@@ -647,6 +650,7 @@ es.onmessage = m => {
 
 (async () => {
   CAT = await (await fetch('/api/catalog')).json();
+  if (CAT.debug) $('total').insertAdjacentHTML('beforebegin', '<span class="debugtag" title="started with --debug: every level is unlocked">DEBUG: all levels unlocked</span>');
   await refresh();
   SEL = STATE.level;
   $('minutes').value = LV().minutes; $('minutesLbl').textContent = LV().minutes;

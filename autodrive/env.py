@@ -149,6 +149,9 @@ class AutoDriveEnv(gym.Env):
         if p.get("start_togo"):
             # reverse curriculum: start part-way along the route, near the goal
             s0 = max(0.0, self.route.length - float(rng.uniform(*p["start_togo"])))
+            if p.get("world") == "road" and not p.get("pad_only"):
+                # single-road levels: always start ON the road, facing the pad
+                s0 = min(s0, max(0.0, self.route.in_lot_s - 4.0))
         p0 = self.route.pos(s0)
         th = float(self.route.heading(s0 + 0.5))
         v0 = float(p.get("v0", rng.uniform(0, 0.6) * self.route.limit(s0)))

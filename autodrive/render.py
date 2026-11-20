@@ -813,10 +813,11 @@ class Renderer:
         scr.blit(self.ground, (-ox, -oy))
         # --- route + target slot ------------------------------------------------
         self.ov_under.fill((0, 0, 0, 0))
-        self._route(env)
-        # --- sensors --------------------------------------------------------------
+        # sensors first: pygame.draw REPLACES pixels on this layer, so the
+        # route and the target slot must come after or the cones erase them
         if self.show_sensors:
             self._sensors(env, ax, ay, ath)
+        self._route(env)
         scr.blit(self.ov_under, (0, 0))
         # --- actors ---------------------------------------------------------------
         for c in env.traffic.cars:
