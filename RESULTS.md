@@ -159,3 +159,23 @@ blocked by the network; the Kenney packs came from a GitHub mirror.
 - The reward-hacking detector, the `broken_on_purpose` preset and the scripted
   scenario test suite were deferred at your request.
 - Turning into side slots was replaced by end-of-aisle bays (see above).
+
+## Training speed (profiling, Nov 2026)
+
+Where the time goes (PPO, 8 workers on 4 CPU cores, rush-hour stage): ~86%
+collecting experience, ~13% network updates. The simulation alone runs ~1,600
+steps/s on 4 processes, but collection reaches only about half of that: the 8
+environments step in lockstep (everyone waits for the slowest step or reset)
+plus the main process's work between steps.
+
+| Change | Effect on learning | Speed |
+|---|---|---|
+| `Path.pos` via `np.interp`, squared-distance threshold checks | none: same seeds give identical drives (max diff 1.8e-15) | env +13-20% |
+| one OpenBLAS thread per worker | none | small (+~5%) |
+| together, measured in real PPO training (rush hour) | none | **650 -> 796 steps/s (+22%)** |
+| traffic cars see the agent's whole body (not only its centre) | fewer unfair crashes (22 -> 15 per 60 drives) - makes traffic learnable | - |
+| PyTorch threads 1/2, 4-12 environments | none | within noise (690-720 steps/s) |
+| PPO epochs 6 -> 10 (rejected) | **worse**: level 2, 8 min, 2 seeds: 919/874 -> 383/769 points | - |
+
+With the faster simulation, level 2 (8 min) collected 557k-707k steps instead
+of 464k and scored 919 and 874 (3 stars) vs 853 before.
