@@ -62,9 +62,11 @@ C = dict(
     pos=(92, 200, 120), neg=(232, 88, 80), accent=(80, 170, 255), route=(70, 200, 255),
     target=(80, 230, 140),
 )
-CAM_COLORS = [(80, 170, 255), (160, 120, 255), (255, 180, 80), (255, 180, 80), (255, 110, 160),
-              (200, 200, 200)]
-CLS_COLORS = {CLS_STATIC: (255, 255, 255), CLS_VEHICLE: (255, 210, 60), CLS_PED: (255, 70, 70)}
+SENSOR_COL = (120, 196, 255)    # one calm colour for every camera: the scene stays readable
+# what a ray hit: (colour, alpha, radius in px at zoom 1). Static hits stay quiet,
+# things that move (cars, people) stand out.
+CLS_STYLE = {CLS_STATIC: ((205, 210, 216), 150, 2), CLS_VEHICLE: ((255, 206, 64), 235, 3),
+             CLS_PED: ((255, 80, 80), 255, 3)}
 
 
 def _font(size, bold=False):
@@ -187,17 +189,21 @@ class Renderer:
             self.ped_src = [s]
         self.tree_src = [self._load_img("objects/tree_large.png"), self._load_img("objects/tree_small.png")]
         # tone the bright Kenney greens down to the palette
-        self.tree_src = [self._darken(t, 0.78) for t in self.tree_src if t is not None]
+        self.tree_src = [self._darken(t, 0.80, desat=0.35) for t in self.tree_src if t is not None]
         self.skid_src = self._load_img("objects/skidmark_short_1.png")
         # scaled + rotation caches
         self.car_scaled = {}
         self.rot_cache = {}
 
     @staticmethod
-    def _darken(img, k):
+    def _darken(img, k, desat=0.0):
+        """Darken by k and pull `desat` of the way towards grey (calmer colours)."""
         out = img.copy()
         arr = pygame.surfarray.pixels3d(out)
-        arr[:] = (arr.astype(np.float32) * k).astype(np.uint8)
+        a = arr.astype(np.float32)
+        lum = a @ np.array([0.299, 0.587, 0.114], np.float32)
+        a = a + (lum[..., None] - a) * desat
+        arr[:] = np.clip(a * k, 0, 255).astype(np.uint8)
         del arr
         return out
 
@@ -953,23 +959,25 @@ class Renderer:
             n = cam.n_rays if cam else len(sens.local_ang) - start
             idx = slice(start, start + n)
             start += n
-            col = CAM_COLORS[ci]
             org = env.ray_org[idx] + np.array([dx, dy])
             ang = env.car.theta + dth + sens.local_ang[idx]
             dist = env.ray_dist[idx]
             ends = org + np.stack([np.cos(ang), np.sin(ang)], 1) * dist[:, None]
-            if cam is not None:
+            k = max(1.0, self.ppm / PPM)            # marks grow a little when zoomed in
+            if cam is not None:                     # camera: faint fan + a soft edge where rays end
                 poly = [self.w2s(org[0])] + [self.w2s(e) for e in ends] + [self.w2s(org[-1])]
-                pygame.draw.polygon(surf, (*col, 22), poly)
-                pygame.draw.lines(surf, (*col, 90), False, [self.w2s(e) for e in ends], 1)
-            else:
-                pygame.draw.polygon(surf, (*col, 18), [self.w2s(e) for e in ends])
+                pygame.draw.polygon(surf, (*SENSOR_COL, 10), poly)
+                pygame.draw.lines(surf, (*SENSOR_COL, 55), False, [self.w2s(e) for e in ends], 1)
+            # (ultrasonic ring: no fill - it only shows what it actually detects)
             sig = getattr(env, "ray_sig", np.zeros(len(env.ray_cls)))[idx]
             for e, c, g in zip(ends, env.ray_cls[idx], sig):
                 if c != CLS_NONE:
-                    pygame.draw.circle(surf, (*CLS_COLORS[c], 220), self.w2s(e), 3)
+                    col, a, rad = CLS_STYLE[c]
+                    if cam is None:                 # parking sensor: a short warning tick
+                        col, a = (255, 255, 255), 230
+                    pygame.draw.circle(surf, (*col, a), self.w2s(e), max(1, int(round(rad * k))))
                     if g != 0:                     # this ray sees a turn signal
-                        pygame.draw.circle(surf, (255, 170, 30, 255), self.w2s(e), 6, 2)
+                        pygame.draw.circle(surf, (255, 170, 30, 255), self.w2s(e), int(6 * k), max(1, int(2 * k)))
 
     def _glow(self, col, r):
         k = ("glow", col, r)
