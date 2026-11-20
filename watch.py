@@ -306,12 +306,24 @@ body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.4 system-ui,
 header { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
 header h1 { font-size:16px; margin:0 8px 0 0; letter-spacing:.04em; }
 button, select { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:8px;
-                 padding:6px 10px; font:inherit; cursor:pointer; }
-button:hover, select:hover { border-color:var(--accent); }
+                 padding:6px 10px; font:inherit; cursor:pointer; -webkit-tap-highlight-color:transparent;
+                 transition-property:border-color, color, background-color; transition-duration:150ms; transition-timing-function:ease-out; }
+@media (hover: hover) { button:hover:not(:disabled), select:hover { border-color:var(--accent); } }
+@media (prefers-reduced-motion: no-preference) {
+  button { transition-property:border-color, color, background-color, scale; }
+  button:not(:disabled):active { scale:0.96; }
+  .zoom button:not(:disabled):active { scale:1; }       /* used rapidly: instant feedback only */
+}
+/* zoom: -/+ joined like a stepper; nested radius 8 = 7 + 1 border */
+.zoom { display:inline-flex; align-items:stretch; border:1px solid var(--line); border-radius:8px; background:var(--panel); overflow:hidden; }
+.zoom button { border:none; border-radius:0; background:transparent; padding:0 9px; display:grid; place-items:center; color:var(--dim); }
+.zoom button svg { width:12px; height:12px; display:block; }
+.zoom #zl { min-width:52px; padding:6px 4px; color:var(--fg); font-size:12px; font-variant-numeric:tabular-nums; }
+@media (hover: hover) { .zoom button:hover { background:#232834; color:var(--fg); } }
 button.on { border-color:var(--accent); color:var(--accent); }
 main { display:grid; grid-template-columns: minmax(0,1fr) 280px; gap:16px; padding:16px; }
 @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-#view { width:100%; border-radius:10px; border:1px solid var(--line); background:#000; display:block; }
+#view { width:100%; border-radius:10px; background:#000; display:block; outline:1px solid oklch(1 0 0 / 0.1); outline-offset:-1px; cursor:zoom-in; }
 aside { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; align-self:start; }
 aside h2 { font-size:12px; color:var(--dim); text-transform:uppercase; letter-spacing:.08em; margin:14px 0 6px; }
 aside h2:first-child { margin-top:0; }
@@ -335,7 +347,7 @@ code { color:var(--dim); font-size:12px; word-break:break-all; }
   <button id="sensors" class="on">Sensors</button>
   <button id="hud" class="on">HUD</button>
   <button id="sound">Sound on</button>
-  <span class="dim">Zoom</span><button id="zout">-</button><span id="zl">100%</span><button id="zin">+</button>
+  <span class="dim">Zoom</span><span class="zoom"><button id="zout" title="zoom out" aria-label="zoom out"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button><button id="zl" title="reset zoom">100%</button><button id="zin" title="zoom in" aria-label="zoom in"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8M6 2v8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></span>
 </header>
 <main>
   <img id="view" src="/stream.mjpg" alt="live view of the self-driving car">

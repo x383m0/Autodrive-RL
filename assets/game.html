@@ -31,7 +31,8 @@ button.ghost { background:none; border-color:transparent; color:var(--dim); padd
 .layout { display:grid; grid-template-columns:230px minmax(0,1fr); gap:16px; padding:16px; }
 @media (max-width: 1000px) { .layout { grid-template-columns:1fr; } }
 .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
-.levels { display:flex; flex-direction:column; gap:6px; align-self:start; }
+/* nested radii: outer = inner (9) + padding (8) + border (1) */
+.levels { display:flex; flex-direction:column; gap:6px; align-self:start; padding:8px; border-radius:18px; }
 .lvl { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:9px; border:1px solid transparent; cursor:pointer; }
 .lvl { transition:background-color 150ms ease-out; -webkit-tap-highlight-color:transparent; }
 @media (hover: hover) { .lvl:hover { background:var(--panel2); } }
@@ -141,8 +142,8 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .mapwrap { position:relative; overflow:hidden; border-radius:10px; outline:1px solid oklch(1 0 0 / 0.1); outline-offset:-1px; margin-top:8px; cursor:grab; touch-action:none; }
 .mapwrap.drag { cursor:grabbing; }
 .mapwrap img { width:100%; display:block; transform-origin:0 0; user-select:none; -webkit-user-drag:none; }
-.mapwrap .zoomctl { position:absolute; right:8px; bottom:8px; }
-.mapwrap .stepper { background:rgba(24,27,34,.9); }
+.mapwrap .zoomctl { position:absolute; right:6px; bottom:6px; }
+.mapwrap .stepper { background:rgba(24,27,34,.9); border-radius:4px; }   /* 10 (map) - 6 (inset) */
 #view { cursor:zoom-in; }
 .levelcard { padding:18px 20px; }
 .brief { font-size:21px; line-height:1.4; margin:12px 0 18px; max-width:62ch; }
