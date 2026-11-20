@@ -7,6 +7,8 @@ object it hits (so things behind a parked car or around a building corner
 are invisible = real occlusion) and reports
     * how far the hit is (normalised closeness, 0 = nothing in range)
     * what class it hit: static (building / parked car), vehicle, pedestrian
+    * whether a hit vehicle is signalling a turn: -1 left, +1 right, 0 none
+      (the car's own left/right, like reading its blinker on camera)
 
 This mimics what a vision stack (camera + object detector + depth estimate)
 hands to a planner, while staying cheap enough to train on a CPU.
@@ -64,6 +66,7 @@ ULTRA_RANGE = 5.0
 N_CAM_RAYS = sum(c.n_rays for c in CAMERAS)
 N_RAYS = N_CAM_RAYS + ULTRA_RAYS
 CLS_NONE, CLS_STATIC, CLS_VEHICLE, CLS_PED = 0, 1, 2, 3
+RAY_FEATURES = 5          # closeness, static, vehicle, pedestrian, turn signal
 
 
 class SensorSuite:
@@ -89,8 +92,10 @@ class SensorSuite:
         self.body_off[N_CAM_RAYS:] = dist_to_box_boundary(LENGTH / 2, WIDTH / 2, ua)
         self.max_range = float(self.ranges.max())
 
-    def scan(self, x, y, theta, static_boxes, vehicle_boxes, ped_circles):
-        """Cast all rays. Returns (dist (R,), cls (R,), origins (R,2), dirs (R,2))."""
+    def scan(self, x, y, theta, static_boxes, vehicle_boxes, ped_circles, vehicle_signals=None):
+        """Cast all rays. Returns (dist (R,), cls (R,), origins (R,2), dirs (R,2), sig (R,)).
+
+        vehicle_signals: per vehicle box, -1 (left blinker), +1 (right) or 0."""
         c, s = np.cos(theta), np.sin(theta)
         # origins in world frame
         fo, ro = self.local_org[:, 0], self.local_org[:, 1]
@@ -102,15 +107,18 @@ class SensorSuite:
         R = self.max_range + 6.0
         me = np.array([x, y])
 
-        def cull(arr, extra):
+        def keep(arr, extra):
             if len(arr) == 0:
-                return arr
-            dd = np.linalg.norm(arr[:, :2] - me, axis=1)
-            return arr[dd < R + extra]
+                return np.zeros(0, dtype=bool)
+            return np.linalg.norm(arr[:, :2] - me, axis=1) < R + extra
 
-        sb = cull(static_boxes, 30.0)   # buildings can be big
-        vb = cull(vehicle_boxes, 3.0)
-        pc = cull(ped_circles, 1.0)
+        sb = static_boxes[keep(static_boxes, 30.0)] if len(static_boxes) else static_boxes   # buildings can be big
+        kv = keep(vehicle_boxes, 3.0)
+        vb = vehicle_boxes[kv] if len(vehicle_boxes) else vehicle_boxes
+        vs = (np.asarray(vehicle_signals, dtype=np.float32)[kv] if vehicle_signals is not None and len(vb)
+              else np.zeros(len(vb), dtype=np.float32))
+        sig = np.zeros(N_RAYS, dtype=np.float32)
+        pc = ped_circles[keep(ped_circles, 1.0)] if len(ped_circles) else ped_circles
         best = np.full(N_RAYS, INF)
         cls = np.zeros(N_RAYS, dtype=np.int64)
         # static + vehicle boxes in ONE vectorised call, then split by class
@@ -120,23 +128,29 @@ class SensorSuite:
             j = d.argmin(axis=1)
             best = d[np.arange(len(d)), j]
             cls = np.where(j < len(sb), CLS_STATIC, CLS_VEHICLE)
+            if len(vb):
+                sig = np.where(j >= len(sb), vs[np.clip(j - len(sb), 0, len(vb) - 1)], 0.0).astype(np.float32)
         if len(pc):
             d = ray_circle(origins, dirs, pc).min(axis=1)
             upd = d < best
             best = np.where(upd, d, best)
             cls = np.where(upd, CLS_PED, cls)
+            sig = np.where(upd, 0.0, sig).astype(np.float32)
         dist = best - self.body_off
         miss = dist > self.ranges
         dist = np.where(miss, self.ranges, np.maximum(dist, 0.0))
         cls = np.where(miss, CLS_NONE, cls)
-        return dist, cls, origins, dirs
+        sig = np.where(miss, 0.0, sig).astype(np.float32)
+        return dist, cls, origins, dirs, sig
 
-    def encode(self, dist, cls):
-        """(R,4): closeness in [0,1] (1 = touching, 0 = nothing) + 3 class flags."""
+    def encode(self, dist, cls, sig=None):
+        """(R,5): closeness in [0,1] (1 = touching, 0 = nothing), 3 class flags, turn signal."""
         close = 1.0 - dist / self.ranges
-        out = np.zeros((N_RAYS, 4), dtype=np.float32)
+        out = np.zeros((N_RAYS, RAY_FEATURES), dtype=np.float32)
         out[:, 0] = close
         out[:, 1] = cls == CLS_STATIC
         out[:, 2] = cls == CLS_VEHICLE
         out[:, 3] = cls == CLS_PED
+        if sig is not None:
+            out[:, 4] = sig
         return out.reshape(-1)

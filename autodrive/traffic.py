@@ -290,3 +290,7 @@ class TrafficManager:
         if not self.cars:
             return np.zeros((0, 5))
         return np.array([c.box for c in self.cars])
+
+    def signals(self):
+        """Turn signal of every car, same order as boxes(): -1 left, +1 right, 0 none."""
+        return np.array([{"L": -1.0, "R": 1.0}.get(c.blinker, 0.0) for c in self.cars], dtype=np.float32)

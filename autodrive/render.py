@@ -964,9 +964,12 @@ class Renderer:
                 pygame.draw.lines(surf, (*col, 90), False, [self.w2s(e) for e in ends], 1)
             else:
                 pygame.draw.polygon(surf, (*col, 18), [self.w2s(e) for e in ends])
-            for e, c in zip(ends, env.ray_cls[idx]):
+            sig = getattr(env, "ray_sig", np.zeros(len(env.ray_cls)))[idx]
+            for e, c, g in zip(ends, env.ray_cls[idx], sig):
                 if c != CLS_NONE:
                     pygame.draw.circle(surf, (*CLS_COLORS[c], 220), self.w2s(e), 3)
+                    if g != 0:                     # this ray sees a turn signal
+                        pygame.draw.circle(surf, (255, 170, 30, 255), self.w2s(e), 6, 2)
 
     def _glow(self, col, r):
         k = ("glow", col, r)

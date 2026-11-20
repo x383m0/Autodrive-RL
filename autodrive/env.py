@@ -37,13 +37,15 @@ from .geometry import (obb_circle_overlap, obb_corners, obb_overlap_many, to_loc
                        wrap_angle)
 from .pedestrians import PedestrianManager
 from .rewards import TERMS, RewardComputer, load_reward_config
-from .sensors import CLS_NONE, CLS_PED, CLS_VEHICLE, N_RAYS, SensorSuite
+from .sensors import CLS_NONE, CLS_PED, CLS_VEHICLE, N_RAYS, RAY_FEATURES, SensorSuite
 from .traffic import TrafficManager
 from .vehicle import LENGTH, MAX_BRAKE, MAX_STEER, WIDTH, BicycleCar
 
 DT = 0.1
 WP_OFFSETS = np.array([2, 4, 6, 8, 11, 14, 18, 23, 30, 40], dtype=float)
-FRAME_DIM = N_RAYS * 4 + 6 + 5 + 21 + 3 + 7 + 5
+FRAME_EXTRA = 6 + 5 + 21 + 3 + 7 + 5     # ego, lane, GPS, signs, next control, parking target
+FRAME_DIM = N_RAYS * RAY_FEATURES + FRAME_EXTRA
+FRAME_DIM_V1 = N_RAYS * 4 + FRAME_EXTRA   # before rays could see turn signals (see obs_compat.py)
 # "Parked" = the car is inside its slot and (almost) stopped. The window is
 # deliberately reachable; how CENTRED the car is gets rewarded separately by
 # the parking_precision term (1.0 = perfect, 0.0 = at the edge of this window).
@@ -274,9 +276,9 @@ class AutoDriveEnv(gym.Env):
         self.static_boxes = self.city.static_boxes()
         self.npc_boxes = self.traffic.boxes()
         self.ped_circ = self.peds.circles()
-        d, c, o, dirs = self.sensors.scan(car.x, car.y, car.theta, self.static_boxes,
-                                          self.npc_boxes, self.ped_circ)
-        self.ray_dist, self.ray_cls, self.ray_org, self.ray_dir = d, c, o, dirs
+        d, c, o, dirs, sig = self.sensors.scan(car.x, car.y, car.theta, self.static_boxes,
+                                               self.npc_boxes, self.ped_circ, self.traffic.signals())
+        self.ray_dist, self.ray_cls, self.ray_org, self.ray_dir, self.ray_sig = d, c, o, dirs, sig
 
     def _next_event(self, s_front, kinds=("light", "stop")):
         for i, ev in enumerate(self.route.events):
@@ -479,7 +481,7 @@ class AutoDriveEnv(gym.Env):
         car = self.car
         route = self.route
         city = self.city
-        rays = self.sensors.encode(self.ray_dist, self.ray_cls)
+        rays = self.sensors.encode(self.ray_dist, self.ray_cls, self.ray_sig)
         ego = [car.v / 20.0, car.delta / MAX_STEER, car.a / MAX_BRAKE, car.yaw_rate,
                self.last_action[0], self.last_action[1]]
         he = wrap_angle(car.theta - route.heading(self.s))

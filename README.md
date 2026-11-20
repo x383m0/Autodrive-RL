@@ -5,7 +5,9 @@ procedurally generated city with **reinforcement learning** (PPO), obey speed
 limits, traffic lights and stop signs, avoid cars and pedestrians, and park in a
 target slot. The car is **not omniscient**: it only sees through ray-cast
 "cameras" with limited fields of view (things behind a parked car are
-invisible), plus GPS route waypoints.
+invisible), plus GPS route waypoints. Each ray reports how far the hit is, what
+it hit (building/parked car, car, pedestrian) and, for a car, whether it is
+signalling a left or right turn.
 
 The point of the project is the **reward**: you design it yourself in a YAML
 file, switching terms on and off and choosing weights, then train and compare
@@ -144,7 +146,7 @@ in `autodrive/rewards.py`.
 | Physics | `autodrive/vehicle.py` | kinematic bicycle model; actions are steering + target speed (a cruise controller tracks it) |
 | Traffic | `autodrive/traffic.py` | rule-following NPC cars (IDM car-following) with personalities: calm, normal, rusher (runs yellows), timid, erratic (sudden hard braking) |
 | Pedestrians | `autodrive/pedestrians.py` | crosswalk users (obey walk signals), jaywalkers (some careless), kids hidden between parked cars who run out |
-| Sensors | `autodrive/sensors.py` | 5 cameras (front wide / narrow-long / left / right / rear) + 12-beam ultrasonic ring, real occlusion; last 4 frames stacked |
+| Sensors | `autodrive/sensors.py` | 5 cameras (front wide / narrow-long / left / right / rear) + 12-beam ultrasonic ring, real occlusion, sees other cars' turn signals; last 4 frames stacked. Cars trained before turn signals were visible still work (`autodrive/obs_compat.py`) |
 | Environment | `autodrive/env.py` | Gymnasium env: observation, rule checks, termination |
 | Rewards | `autodrive/rewards.py` | the configurable reward, per-term breakdown |
 | Curriculum | `autodrive/curriculum.py` | 10 stages that advance automatically: 4 parking lessons (reverse curriculum), empty streets, traffic rules, light traffic, traffic, pedestrians, full city |

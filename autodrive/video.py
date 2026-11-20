@@ -43,8 +43,13 @@ def load_policy(exp_dir, deterministic=True):
     with open(exp_dir / "vecnormalize.pkl", "rb") as f:
         vn = pickle.load(f)
     mean, var, eps, clip = vn.obs_rms.mean, vn.obs_rms.var, vn.epsilon, vn.clip_obs
+    # cars trained before rays could see turn signals: show them the old layout
+    from .obs_compat import downgrade_index, obs_version
+    pick = downgrade_index() if obs_version(model.observation_space.shape[0]) == 1 else None
 
     def policy(obs):
+        if pick is not None:
+            obs = obs[..., pick]
         o = np.clip((obs - mean) / np.sqrt(var + eps), -clip, clip).astype(np.float32)
         a, _ = model.predict(o, deterministic=deterministic)
         return a

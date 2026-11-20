@@ -189,18 +189,38 @@ def main():
     norm_src = (ckpt_dir if args.resume and (ckpt_dir / "vecnormalize.pkl").exists()
                 else init if init is not None else None)
     if norm_src is not None:
-        venv = VecNormalize.load(str(norm_src / "vecnormalize.pkl"), ScaleReward(venv, REWARD_SCALE))
+        import pickle
+        from autodrive.obs_compat import upgrade_obs_rms
+        with open(norm_src / "vecnormalize.pkl", "rb") as f:
+            vn = pickle.load(f)
+        inner = ScaleReward(venv, REWARD_SCALE)
+        if vn.obs_rms.mean.shape != inner.observation_space.shape:
+            # saved before rays could see turn signals: widen the stats
+            upgrade_obs_rms(vn.obs_rms)
+            vn.observation_space = inner.observation_space
+        vn.set_venv(inner)
+        venv = vn
         venv.norm_reward = False
         venv.training = True
     else:
         venv = VecNormalize(ScaleReward(venv, REWARD_SCALE), norm_obs=True, norm_reward=False,
                             clip_obs=10.0, gamma=0.99)
 
+    def load_model(path):
+        """Load a saved car; older cars (no turn-signal inputs) are widened with
+        zero weights so they drive exactly as before and can learn the new input."""
+        from autodrive.obs_compat import obs_version, upgrade_model
+        old = PPO.load(str(path), device="cpu")
+        if obs_version(old.observation_space.shape[0]) == 1:
+            print("[train] older car: adding the turn-signal inputs (zero weights at first)")
+            return upgrade_model(old, venv)
+        return PPO.load(str(path), env=venv, device="cpu")
+
     if args.resume and (ckpt_dir / "model.zip").exists():
-        model = PPO.load(str(ckpt_dir / "model.zip"), env=venv, device="cpu")
+        model = load_model(ckpt_dir / "model.zip")
         print("[resume] loaded checkpoint model")
     elif init is not None:
-        model = PPO.load(str(init / "model.zip"), env=venv, device="cpu")
+        model = load_model(init / "model.zip")
         model.num_timesteps = 0
         print(f"[train] starting from the car in {init}")
     else:
