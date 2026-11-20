@@ -187,6 +187,14 @@ class TrafficManager:
         others_pos = np.array(others_pos) if others_pos else np.zeros((0, 2))
         ped_pos = np.array([p.pos for p in peds]) if peds else np.zeros((0, 2))
         agent_box = agent.box if agent is not None else None
+        agent_pts = None
+        if agent is not None:
+            fx, fy = np.cos(agent.theta), np.sin(agent.theta)
+            f, r = np.array([fx, fy]), np.array([-fy, fx])
+            hl, hw = agent_box[2] - 0.3, agent_box[3] - 0.2
+            agent_pts = np.array([agent.pos, agent.pos + f * hl, agent.pos - f * hl,
+                                  agent.pos + f * hl + r * hw, agent.pos + f * hl - r * hw,
+                                  agent.pos - f * hl + r * hw, agent.pos - f * hl - r * hw])
 
         look = np.arange(1.0, 45.0, 1.5)
         for k, car in enumerate(self.cars):
@@ -199,10 +207,17 @@ class TrafficManager:
                 d = np.linalg.norm(pts_ahead[:, None, :] - others_pos[None, :, :], axis=2)  # (n, m)
                 d[:, k] = 1e9                     # that's me
                 hit = d < 1.7
+                if agent_pts is not None:
+                    # the agent counts with its whole body (centre, ends, corners): a
+                    # car that is a bit off-centre or at an angle still blocks the lane
+                    da = np.linalg.norm(pts_ahead[:, None, :] - agent_pts[None, :, :], axis=2).min(1)
+                    hit[:, -1] = (da < 1.4) | hit[:, -1]
                 for j in np.where(hit.any(0))[0]:
                     i0 = int(np.argmax(hit[:, j]))
-                    # ignore cars travelling towards us (oncoming lane overlap at turns)
-                    if np.cos(others_th[j] - car.theta) < -0.3:
+                    # ignore cars travelling towards us (oncoming lane overlap at turns) -
+                    # but never the agent once its body is in our lane
+                    is_agent = agent is not None and j == len(others_pos) - 1
+                    if not is_agent and np.cos(others_th[j] - car.theta) < -0.3:
                         continue
                     g = look[i0] - NPC_LEN
                     if g < gap:
