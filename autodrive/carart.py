@@ -15,6 +15,7 @@ ASPECT = 0.48            # sprite width / length (matches the renderer)
 GLASS = (28, 36, 48)
 GLASS_HI = (92, 118, 142)
 TRIM = (24, 25, 28)
+MIRROR = (12, 12, 14)
 HEAD = (246, 244, 226)
 TAIL = (196, 28, 34)
 TAIL_HI = (255, 96, 90)
@@ -88,16 +89,18 @@ def make_car(color, style="sedan", glass_roof=False, taxi=False, out_h=OUT_H):
     # ---- mirrors (behind the body) ----
     my = H * (w0 + 0.03)
     for side in (-1, 1):
-        cx = W / 2 + side * (body_w / 2 + W * 0.03)
-        pygame.draw.ellipse(S, dark, (cx - W * 0.055, my - H * 0.018, W * 0.11, H * 0.04))
+        cx = W / 2 + side * (body_w / 2 + W * 0.025)
+        pygame.draw.rect(S, MIRROR, (cx - W * 0.07, my - H * 0.019, W * 0.14, H * 0.042),
+                         border_radius=int(W * 0.025))
     # ---- body ----
-    _rrect(S, dark, (bx, 0, body_w, H), body_w * nose_r * 1.4, body_w * tail_r * 1.4)
+    # boxy body: modest corner radius so it stays a rounded rectangle
+    rn, rt = body_w * (0.10 + 0.25 * nose_r), body_w * (0.08 + 0.25 * tail_r)
+    body = pygame.Surface((W, H), pygame.SRCALPHA)
+    _rrect(body, (255, 255, 255), (bx, 0, body_w, H), rn, rt)       # body shape, for clipping
+    _rrect(S, dark, (bx, 0, body_w, H), rn, rt)
     inset = W * 0.014
-    _rrect(S, col, (bx + inset, inset, body_w - 2 * inset, H - 2 * inset),
-           body_w * nose_r * 1.35, body_w * tail_r * 1.35)
-    arr_a = pygame.surfarray.pixels_alpha(S)
-    body_mask = arr_a > 0
-    del arr_a
+    _rrect(S, col, (bx + inset, inset, body_w - 2 * inset, H - 2 * inset), rn - inset, rt - inset)
+    body_mask = pygame.surfarray.array_alpha(body) > 0
     _shade(S, body_mask, bx, body_w)
     # ---- cabin ----
     cab_w = body_w * cw
@@ -156,17 +159,23 @@ def make_car(color, style="sedan", glass_roof=False, taxi=False, out_h=OUT_H):
     if style not in ("van", "pickup"):
         pygame.draw.line(S, seam, (bx + body_w * 0.18, H * (rr1 + 0.015)), (bx + body_w * 0.82, H * (rr1 + 0.015)), lw)
     # ---- lights ----
+    # slim rectangular light bars, drawn on their own layer and clipped to the
+    # body so they can never stick out of the car
+    L = pygame.Surface((W, H), pygame.SRCALPHA)
+    r = max(2, int(W * 0.012))
     for side in (-1, 1):
-        hx = W / 2 + side * body_w * 0.25
-        hy = H * (0.016 + 0.03 * nose_r)
-        pygame.draw.ellipse(S, TRIM, (hx - body_w * 0.10, hy, body_w * 0.20, H * 0.030))
-        pygame.draw.ellipse(S, HEAD, (hx - body_w * 0.085, hy + H * 0.005, body_w * 0.17, H * 0.020))
-        tx = W / 2 + side * body_w * 0.27
-        ty = H * (0.962 - 0.03 * tail_r)
-        pygame.draw.rect(S, TAIL, (tx - body_w * 0.11, ty, body_w * 0.22, H * 0.022),
-                         border_radius=int(W * 0.02))
-        pygame.draw.rect(S, TAIL_HI, (tx - body_w * 0.06, ty + H * 0.005, body_w * 0.10, H * 0.009),
-                         border_radius=int(W * 0.01))
+        x_in, x_out = W / 2 + side * body_w * 0.12, W / 2 + side * body_w * 0.44
+        x0, x1 = min(x_in, x_out), max(x_in, x_out)
+        pygame.draw.rect(L, TRIM, (x0, H * 0.010, x1 - x0, H * 0.030), border_radius=r)
+        pygame.draw.rect(L, HEAD, (x0 + W * 0.02, H * 0.016, x1 - x0 - W * 0.04, H * 0.016), border_radius=r)
+        pygame.draw.rect(L, TRIM, (x0, H * 0.962, x1 - x0, H * 0.028), border_radius=r)
+        pygame.draw.rect(L, TAIL, (x0 + W * 0.02, H * 0.967, x1 - x0 - W * 0.04, H * 0.017), border_radius=r)
+        hi_x = x0 + (x1 - x0) * (0.15 if side < 0 else 0.45)
+        pygame.draw.rect(L, TAIL_HI, (hi_x, H * 0.971, (x1 - x0) * 0.4, H * 0.007), border_radius=r)
+    la = pygame.surfarray.pixels_alpha(L)
+    la[~body_mask] = 0
+    del la
+    S.blit(L, (0, 0))
     if taxi:                                 # roof sign
         sx, sy = W / 2, H * (w1 + (r1 - w1) * 0.35)
         pygame.draw.rect(S, TRIM, (sx - cab_w * 0.30, sy - H * 0.026, cab_w * 0.60, H * 0.052), border_radius=int(W * 0.02))
