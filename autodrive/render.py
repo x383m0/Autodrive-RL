@@ -40,6 +40,7 @@ from .city import (AISLE_HW, CORNER_OFF, CROSSWALK_W, LANE_OFF, LANE_W, PARKED_O
 from .geometry import obb_corners, wrap_angle
 from .rewards import active_names
 from .sensors import CAMERAS, CLS_NONE, CLS_PED, CLS_STATIC, CLS_VEHICLE
+from .carart import ASPECT, BODY_W
 from .vehicle import LENGTH, WIDTH
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
@@ -558,7 +559,7 @@ class Renderer:
 
     def _car_layers(self, model, mkey, length):
         """The model's layers scaled to the current zoom (cached)."""
-        w = max(int(length * 0.48 * self.ppm), 4)
+        w = max(int(length * ASPECT * self.ppm), 4)
         h = max(int(length * self.ppm), 8)
         k = ("layers", mkey, w, h)
         lay = self.car_scaled.get(k)
@@ -659,7 +660,7 @@ class Renderer:
             f = np.array([math.cos(theta), math.sin(theta)])
             r = np.array([-f[1], f[0]])
             p = np.array(pos)
-            hw = length * 0.48 * 0.84 / 2
+            hw = length * ASPECT * BODY_W / 2
             rad = max(3, int(self.ppm * 0.45))
             if brake:
                 for s in (-1, 1):

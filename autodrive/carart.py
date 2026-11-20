@@ -23,8 +23,8 @@ import pygame
 
 SS = 3                   # supersampling factor
 OUT_H = 256              # sprite height in pixels (car length); 2x the largest zoom need
-ASPECT = 0.48            # sprite width / length (the renderer uses the same)
-BODY_W = 0.84            # body width / sprite width (the rest is room for mirrors / wheels)
+ASPECT = 0.50            # sprite width / length (the renderer uses the same)
+BODY_W = 0.86            # body width / sprite width (the rest is room for mirrors / wheels)
 
 GLASS_FRONT = (46, 58, 72)
 GLASS_SIDE = (24, 30, 38)
@@ -266,7 +266,7 @@ def make_car(color, style="sedan", sunroof=False, glass_roof=False, rack=False, 
     # ---- mirrors: small black wedges at the base of the A-pillars --------------------------
     mv = wf[1] + 0.008
     for s in (-1, 1):
-        _poly(S, MIRROR, [P(s * 0.93, mv), P(s * 1.13, mv + 0.012), P(s * 1.17, mv + 0.040), P(s * 0.93, mv + 0.050)])
+        _poly(S, MIRROR, [P(s * 0.93, mv), P(s * 1.10, mv + 0.012), P(s * 1.14, mv + 0.040), P(s * 0.93, mv + 0.050)])
 
     # ---- lights: swept shapes that follow the body corners ------------------------------
     fp = [p for p in g.front_path() if 0.40 <= p[0]]
