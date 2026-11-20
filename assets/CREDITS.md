@@ -9,9 +9,9 @@ system synthesises a replacement.
 
 | Files | Source | License |
 |---|---|---|
-| `peds/*.png`, `objects/*.png` | Kenney "Racing Pack" (kenney.nl), via the `series-ai/jam-ready-assets` GitHub mirror | CC0 |
+| `objects/*.png` | Kenney "Racing Pack" (kenney.nl), via the `series-ai/jam-ready-assets` GitHub mirror | CC0 |
 
-Cars (agent and traffic) are drawn procedurally in high resolution by
+Cars (agent and traffic) and pedestrians (`autodrive/pedart.py`) are drawn procedurally in high resolution by
 `autodrive/carart.py` (no image files). Roads, buildings, markings, signs and traffic lights are drawn procedurally.
 
 ## Sounds (`sounds/`)

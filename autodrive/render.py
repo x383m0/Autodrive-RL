@@ -177,16 +177,7 @@ class Renderer:
         self.agent_model = agent_car()     # pearl white with a glass roof
         self.damage = {}                   # car key -> damaged corner ("FL", ...) this episode
         self._last_steps = 0
-        self.ped_src = []
-        for p in sorted((ASSETS / "sprites" / "peds").glob("*.png")):
-            img = self._load_img(f"peds/{p.name}")
-            if img is not None:
-                self.ped_src.append(img)
-        if not self.ped_src:
-            s = pygame.Surface((36, 24), pygame.SRCALPHA)
-            pygame.draw.ellipse(s, (60, 110, 200), (0, 0, 36, 24))
-            pygame.draw.circle(s, (230, 190, 150), (18, 12), 8)
-            self.ped_src = [s]
+        # pedestrians are drawn procedurally (autodrive/pedart.py)
         self.tree_src = [self._load_img("objects/tree_large.png"), self._load_img("objects/tree_small.png")]
         # tone the bright Kenney greens down to the palette
         self.tree_src = [self._darken(t, 0.80, desat=0.35) for t in self.tree_src if t is not None]
@@ -991,20 +982,27 @@ class Renderer:
         return g
 
     def _ped(self, S, p, x, y, th):
-        src = self.ped_src[p.sprite % len(self.ped_src)]
-        w = int(1.25 * self.ppm)          # drawn a bit larger than life so people are easy to spot
-        h = int(w * src.get_height() / src.get_width())
-        bob = 1.0 + 0.06 * math.sin(p.anim * 3) if p.state not in ("wait", "hidden") else 1.0
-        key = ("ped", p.sprite % len(self.ped_src), int(bob * 20))
-        surf = self.car_scaled.get(key)
-        if surf is None:
-            surf = pygame.transform.smoothscale(src, (int(w * bob), int(h * bob)))
-            self.car_scaled[key] = surf
-        # sprite faces up: rotate to heading
-        rot = self._rotated(key, surf, th)
+        """A procedurally drawn person (autodrive/pedart.py): walk cycle, soft shadow;
+        kids are smaller with a backpack; a hidden kid is drawn see-through."""
+        from .pedart import N_FRAMES, person
+        moving = p.state not in ("wait", "hidden") and float(np.hypot(*p.vel)) > 0.05
+        frame = int(p.anim * 2.67) % N_FRAMES if moving else -1
+        kid = p.kind == "emerger"
+        deg = int(round(math.degrees(th) / 6.0)) * 6 % 360
+        size = max(8, int(2.0 * self.ppm))             # ~2x life size, like map icons: easy to spot
+        k = ("ped", p.sprite % 12, frame, kid, deg, size)
+        ent = self.rot_cache.get(k)
+        if ent is None:
+            src = pygame.transform.smoothscale(person(p.sprite, frame, kid), (size, size))
+            rot = pygame.transform.rotozoom(src, -(deg + 90), 1.0)
+            ent = (rot,) + self._soft_shadow(rot)
+            if len(self.rot_cache) > 3000:
+                self.rot_cache.clear()
+            self.rot_cache[k] = ent
+        rot, sh, pad = ent
         sx, sy = self.w2s((x, y))
-        sh = self._shadow_for(rot)
-        S.blit(sh, (sx - rot.get_width() // 2 + 2, sy - rot.get_height() // 2 + 3))
+        off = -self.SUN * self.ppm * 0.18
+        S.blit(sh, (sx - rot.get_width() // 2 - pad + off[0], sy - rot.get_height() // 2 - pad + off[1]))
         if p.state == "hidden":
             rot = rot.copy()
             rot.set_alpha(150)
@@ -1141,16 +1139,24 @@ class Renderer:
 
         # ---------- right: reward breakdown ----------
         enabled = active_names(env.reward_cfg)          # built-in + custom rewards in use
-        ph = 64 + 19 * len(enabled)
+        # show only rewards that have paid out this drive (they stay listed once
+        # they have, so rows don't jump); the rest fold into one "+ N more" line
+        shown = [k for k in enabled if abs(env.ep.get(k, 0.0)) > 1e-9 or abs(env.last_terms.get(k, 0.0)) > 1e-9]
+        n_rest = len(enabled) - len(shown)
+        ph = 64 + 19 * len(shown) + (20 if n_rest or not shown else 0)
         x0 = self.LW - 314
         self._panel(pygame.Rect(x0, 14, 300, ph))
         self._text("REWARD", (x0 + 16, 24), "title", C["hud_dim"])
         self._text(f"{env.ep_return:+8.2f}", (x0 + 284, 20), "medb",
                    C["pos"] if env.ep_return >= 0 else C["neg"], anchor="topright")
         self._text(f"step {env.last_reward:+.3f}", (x0 + 284, 42), "tiny", C["hud_dim"], anchor="topright")
-        vals = [env.ep[k] for k in enabled]
+        vals = [env.ep[k] for k in shown]
         vmax = max([abs(v) for v in vals] + [1.0])
-        for j, k in enumerate(enabled):
+        if n_rest or not shown:
+            msg = (f"+ {n_rest} more at 0" if shown else
+                   (f"{n_rest} rewards, none paid yet" if n_rest else "no rewards switched on"))
+            self._text(msg, (x0 + 16, 62 + 19 * len(shown) + 1), "tiny", C["hud_dim"])
+        for j, k in enumerate(shown):
             yy = 62 + j * 19
             v = env.ep[k]
             active = abs(env.last_terms.get(k, 0.0)) > 1e-9
