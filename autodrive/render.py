@@ -142,8 +142,10 @@ class Renderer:
     def _load_sprites(self):
         # high-resolution procedural cars (sedans, SUVs, vans, pickups, a taxi ...)
         from .carart import npc_fleet, agent_car
-        self.npc_src = list(npc_fleet())
-        self.agent_src = agent_car()       # pearl white with a glass roof
+        self.npc_models = list(npc_fleet())
+        self.agent_model = agent_car()     # pearl white with a glass roof
+        self.damage = {}                   # car key -> damaged corner ("FL", ...) this episode
+        self._last_steps = 0
         self.ped_src = []
         for p in sorted((ASSETS / "sprites" / "peds").glob("*.png")):
             img = self._load_img(f"peds/{p.name}")
@@ -183,14 +185,6 @@ class Renderer:
         arr[:] = (a * (1 - mix) + body * mix).astype(np.uint8)
         del arr
         return out
-
-    def _car_surface(self, key, src, length_m, width_m):
-        """Scale a car sprite (nose pointing UP in the file) to world size."""
-        if key not in self.car_scaled:
-            w = max(int(width_m * self.ppm), 4)
-            h = max(int(length_m * self.ppm), 6)
-            self.car_scaled[key] = pygame.transform.smoothscale(src, (w, h))
-        return self.car_scaled[key]
 
     def _rotated(self, key, surf, theta):
         """Rotate a nose-up sprite to heading theta (cached every 3 degrees)."""
@@ -326,9 +320,9 @@ class Renderer:
         # parked cars on streets + in the lot
         lot_boxes = city.lot_parked_boxes()
         for i, pb in enumerate(list(city.parked) + list(lot_boxes)):
-            color = city.parked_meta[i]["color"] if i < len(city.parked_meta) else (i * 7) % len(self.npc_src)
-            self._blit_car(S, (pb[0], pb[1]), pb[4], self.npc_src[color % len(self.npc_src)],
-                           ("p", color % len(self.npc_src)), static=True, length=pb[2] * 2)
+            color = city.parked_meta[i]["color"] if i < len(city.parked_meta) else (i * 7)
+            k = (color * 7 + i * 5) % len(self.npc_models)       # spread over the whole fleet
+            self._blit_car(S, (pb[0], pb[1]), pb[4], self.npc_models[k], ("m", k), static=True, length=pb[2] * 2)
         # trees (with soft shadow)
         for (x, y, s) in city.trees:
             if not self.tree_src:
@@ -402,8 +396,8 @@ class Renderer:
                 pygame.draw.line(S, C["line"], ps(sl["center"] + w * e * SLOT_W / 2 - ax * SLOT_D / 2),
                                  ps(sl["center"] + w * e * SLOT_W / 2 + ax * SLOT_D / 2), 2)
         for i, pb in enumerate(city.lot_parked_boxes()):
-            k = (i * 7) % len(self.npc_src)
-            self._blit_car(S, (pb[0], pb[1]), pb[4], self.npc_src[k], ("p", k), static=True, length=pb[2] * 2)
+            k = (i * 7) % len(self.npc_models)
+            self._blit_car(S, (pb[0], pb[1]), pb[4], self.npc_models[k], ("m", k), static=True, length=pb[2] * 2)
         for (x, y, sz) in city.trees:
             if not self.tree_src:
                 continue
@@ -531,18 +525,165 @@ class Renderer:
         t = pygame.transform.smoothscale(t, (int(w * 0.8), int(h * 0.55)))
         S.blit(t, (px - t.get_width() // 2, py - t.get_height() // 2 + 2))
 
-    def _blit_car(self, S, pos, theta, src, key, static=False, length=None, offset=(0, 0), shadow=True):
+    # ------------------------------------------------------------ cars
+    SUN = np.array([-0.55, -0.83])              # direction TOWARDS the sun (top-left of the screen)
+
+    def _car_layers(self, model, mkey, length):
+        """The model's layers scaled to the current zoom (cached)."""
+        w = max(int(length * 0.48 * self.ppm), 4)
+        h = max(int(length * self.ppm), 8)
+        k = ("layers", mkey, w, h)
+        lay = self.car_scaled.get(k)
+        if lay is None:
+            sm = pygame.transform.smoothscale
+            lay = {n: sm(model[n], (w, h)) for n in ("body", "brake", "blink_L", "blink_R")}
+            lay["glass"] = pygame.surfarray.array_alpha(sm(model["glass"], (w, h))).astype(np.float32) / 255.0
+            self.car_scaled[k] = lay
+        return lay
+
+    def _car_sprite(self, model, mkey, length, deg, steer_b, brake, blink, damage):
+        """Wheels + body + lit lights + sun reflection, rotated to `deg` (cached)."""
+        lay = self._car_layers(model, mkey, length)
+        body = lay["body"]
+        w, h = body.get_size()
+        if damage:
+            k = ("dmg", mkey, damage, w, h)
+            body = self.car_scaled.get(k)
+            if body is None:
+                from .carart import damaged
+                body = pygame.transform.smoothscale(damaged(model, damage, seed=hash(mkey) & 0xffff), (w, h))
+                self.car_scaled[k] = body
+        canvas = pygame.Surface((w, h), pygame.SRCALPHA)
+        # wheels (under the body): tyres poke out a little; front ones turn with the steering
+        L = model["layout"]
+        tl, tw = max(2, int(L["tire_len"] * h)), max(2, int(L["tire_w"] * w))
+        tire = pygame.Surface((tw, tl), pygame.SRCALPHA)
+        tire.fill((22, 22, 24))
+        if tl > 6:
+            pygame.draw.rect(tire, (70, 72, 76), (tw // 3, tl // 4, max(1, tw // 3), tl // 2))     # rim glint
+        for axle, ang in ((L["axle_f"], -math.degrees(steer_b * 0.1)), (L["axle_r"], 0.0)):
+            t = pygame.transform.rotate(tire, ang) if ang else tire
+            for s in (-1, 1):
+                cx = w / 2 + s * L["tire_u"] * w * L["body_w"] / 2
+                canvas.blit(t, (cx - t.get_width() / 2, axle * h - t.get_height() / 2))
+        canvas.blit(body, (0, 0))
+        if brake:
+            canvas.blit(lay["brake"], (0, 0))
+        if blink:
+            canvas.blit(lay["blink_" + blink], (0, 0))
+        # sun reflection on the glass: a bright band that stays fixed to the sun
+        # as the car turns (computed in car space for this heading)
+        th = math.radians(deg)
+        fwd = np.array([math.cos(th), math.sin(th)])
+        right = np.array([-fwd[1], fwd[0]])
+        d = np.array([self.SUN @ right, -(self.SUN @ fwd)])           # sun direction in sprite space
+        gm = lay["glass"]
+        if gm.max() > 0:
+            xs = (np.arange(w) - w / 2) / h
+            ys = (np.arange(h) - h / 2) / h
+            t = xs[:, None] * d[0] + ys[None, :] * d[1]
+            band = 0.42 * np.exp(-((t - 0.10) / 0.05) ** 2) + 0.22 * np.exp(-((t + 0.02) / 0.018) ** 2) \
+                + 0.10 * np.clip(t + 0.3, 0, 0.6)
+            amt = (gm * band)[..., None]
+            arr = pygame.surfarray.pixels3d(canvas)
+            a = arr.astype(np.float32)
+            arr[:] = (a + amt * (np.array([214, 228, 242], np.float32) - a)).astype(np.uint8)
+            del arr
+        return pygame.transform.rotozoom(canvas, -(deg + 90), 1.0)
+
+    def _soft_shadow(self, rot):
+        """A blurred dark copy of the car's outline."""
+        m = pygame.mask.from_surface(rot, 40)
+        s = m.to_surface(setcolor=(0, 0, 0, 105), unsetcolor=(0, 0, 0, 0))
+        w, h = s.get_size()
+        pad = max(2, int(self.ppm * 0.25))
+        big = pygame.Surface((w + 2 * pad, h + 2 * pad), pygame.SRCALPHA)
+        big.blit(s, (pad, pad))
+        f = max(2, int(self.ppm / 4))
+        small = pygame.transform.smoothscale(big, (max(1, big.get_width() // f), max(1, big.get_height() // f)))
+        return pygame.transform.smoothscale(small, big.get_size()), pad
+
+    def _blit_car(self, S, pos, theta, model, mkey, static=False, length=None, steer=0.0, brake=False,
+                  blink=None, damage=None, headlights=False, shadow=True):
         length = length or 4.5
-        surf = self._car_surface((key, round(length, 1)), src, length, length * 0.48)
-        rot = self._rotated((key, round(length, 1)), surf, theta)
-        if static:
-            px, py = self.w2s_static(pos)
-        else:
-            px, py = self.w2s(pos)
-        if shadow:
-            sh = self._shadow_for(rot)
-            S.blit(sh, (px - rot.get_width() // 2 + 4, py - rot.get_height() // 2 + 5))
+        deg = int(round(math.degrees(theta) / 3.0)) * 3 % 360
+        steer_b = int(np.clip(round(steer / 0.1), -6, 6))
+        if blink and (self.blink_t % 0.7) >= 0.35:
+            blink = None                           # indicator off phase
+        k = ("car", mkey, round(length, 1), self.ppm, deg, steer_b, bool(brake), blink, damage)
+        ent = self.rot_cache.get(k)
+        if ent is None:
+            rot = self._car_sprite(model, mkey, length, deg, steer_b, brake, blink, damage)
+            ent = (rot,) + (self._soft_shadow(rot) if shadow else (None, 0))
+            if len(self.rot_cache) > 3000:
+                self.rot_cache.clear()
+            self.rot_cache[k] = ent
+        rot, sh, pad = ent
+        px, py = self.w2s_static(pos) if static else self.w2s(pos)
+        if night := (headlights and getattr(self, "night", False)):
+            self._beam(S, pos, theta, length)
+        if sh is not None:                         # same sun for every car: shadow to the bottom-right
+            off = -self.SUN * self.ppm * 0.35
+            S.blit(sh, (px - rot.get_width() // 2 - pad + off[0], py - rot.get_height() // 2 - pad + off[1]))
         S.blit(rot, (px - rot.get_width() // 2, py - rot.get_height() // 2))
+        # small glows so lit lights read at any zoom
+        if brake or blink or night:
+            f = np.array([math.cos(theta), math.sin(theta)])
+            r = np.array([-f[1], f[0]])
+            p = np.array(pos)
+            hw = length * 0.48 * 0.84 / 2
+            rad = max(3, int(self.ppm * 0.45))
+            if brake:
+                for s in (-1, 1):
+                    q = (self.w2s_static if static else self.w2s)(p - f * (length / 2 - 0.12) + r * s * hw * 0.7)
+                    S.blit(self._glow((255, 30, 30), rad), (q[0] - rad, q[1] - rad), special_flags=pygame.BLEND_RGBA_ADD)
+            if blink:
+                s = 1 if blink == "R" else -1
+                for fo in (length / 2 - 0.15, -(length / 2 - 0.15)):
+                    q = self.w2s(p + f * fo + r * s * hw * 0.92)
+                    S.blit(self._glow((255, 140, 0), rad), (q[0] - rad, q[1] - rad), special_flags=pygame.BLEND_RGBA_ADD)
+
+    def _beam(self, S, pos, theta, length):
+        """Headlight beams (night only): a soft additive cone ahead of the car."""
+        f = np.array([math.cos(theta), math.sin(theta)])
+        r = np.array([-f[1], f[0]])
+        p = np.array(pos) + f * (length / 2)
+        cone = [self.w2s(p + r * 0.6), self.w2s(p + f * 22 + r * 6), self.w2s(p + f * 22 - r * 6), self.w2s(p - r * 0.6)]
+        xs, ys = [q[0] for q in cone], [q[1] for q in cone]
+        x0, y0 = min(xs), min(ys)
+        tmp = pygame.Surface((max(xs) - x0 + 1, max(ys) - y0 + 1), pygame.SRCALPHA)
+        pygame.draw.polygon(tmp, (60, 56, 40, 255), [(x - x0, y - y0) for x, y in cone])
+        S.blit(tmp, (x0, y0), special_flags=pygame.BLEND_RGB_ADD)
+
+    def _npc_steer(self, c):
+        """Steering angle of an NPC from the curvature of its path ahead."""
+        try:
+            k = wrap_angle(c.path.heading(c.s + 2.0) - c.path.heading(c.s)) / 2.0
+        except Exception:
+            return 0.0
+        return float(np.clip(math.atan(2.7 * k), -0.6, 0.6))
+
+    def _mark_damage(self, env):
+        """On a crash: dent the agent's corner that hit, and the other car's (if it was a car)."""
+        car = env.car
+        f = np.array([math.cos(car.theta), math.sin(car.theta)])
+        r = np.array([-f[1], f[0]])
+        best, bd = None, 7.0
+        for c in env.traffic.cars:
+            d = float(np.hypot(c.x - car.x, c.y - car.y))
+            if d < bd:
+                best, bd = c, d
+        if best is not None:
+            rel = np.array([best.x - car.x, best.y - car.y])
+            fr = "F" if rel @ f >= 0 else "R"
+            sd = "R" if rel @ r >= 0 else "L"
+            self.damage["agent"] = fr + sd
+            cf = np.array([math.cos(best.theta), math.sin(best.theta)])
+            cr = np.array([-cf[1], cf[0]])
+            self.damage[best.id] = ("F" if -rel @ cf >= 0 else "R") + ("R" if -rel @ cr >= 0 else "L")
+        else:
+            fr = "F" if car.v >= 0 else "R"
+            self.damage["agent"] = fr + ("R" if car.delta >= 0 else "L")
 
     def _shadow_for(self, rot):
         k = ("sh", id(rot))
@@ -608,6 +749,11 @@ class Renderer:
             self.prev_pose, self.cur_pose = {}, {}
             self.last_skid = None
         car = env.car
+        if env.steps < self._last_steps or env.steps == 0:
+            self.damage = {}                      # new episode: fresh cars
+        self._last_steps = env.steps
+        if any(e[0] == "crash" for e in env.events) and "agent" not in self.damage:
+            self._mark_damage(env)
         ax, ay, ath = self._lerp_pose("agent", car.x, car.y, car.theta, alpha)
         # smooth following camera with look-ahead
         look = np.array([math.cos(ath), math.sin(ath)]) * (6 + car.v * 1.2)
@@ -640,9 +786,10 @@ class Renderer:
             x, y, th = self._lerp_pose(c.id, c.x, c.y, c.theta, alpha)
             if abs(x - self.cam[0]) * self.ppm > self.W / 2 + 60 or abs(y - self.cam[1]) * self.ppm > self.H / 2 + 60:
                 continue
-            src = self.npc_src[c.color % len(self.npc_src)]
-            self._blit_car(scr, (x, y), th, src, ("n", c.color % len(self.npc_src)), length=4.5)
-            self._lights(scr, (x, y), th, 4.5, 1.85, c.braking, c.blinker)
+            k = c.color % len(self.npc_models)
+            self._blit_car(scr, (x, y), th, self.npc_models[k], ("m", k), length=4.5,
+                           steer=self._npc_steer(c), brake=c.braking, blink=c.blinker,
+                           damage=self.damage.get(c.id))
         for i, p in enumerate(env.peds.peds):
             if p.state == "hidden" and not self.show_sensors:
                 pass
@@ -651,8 +798,9 @@ class Renderer:
                 continue
             self._ped(scr, p, x, y, th)
         # agent
-        self._blit_car(scr, (ax, ay), ath, self.agent_src, ("agent",), length=LENGTH)
-        self._lights(scr, (ax, ay), ath, LENGTH, WIDTH, car.braking or car.v < 0.2, env.blinker(), agent=True)
+        self._blit_car(scr, (ax, ay), ath, self.agent_model, ("agent",), length=LENGTH,
+                       steer=car.delta, brake=car.braking or car.v < 0.2, blink=env.blinker(),
+                       damage=self.damage.get("agent"), headlights=True)
         # traffic light heads
         self._traffic_lights(env)
         # particles
@@ -780,29 +928,6 @@ class Renderer:
             for e, c in zip(ends, env.ray_cls[idx]):
                 if c != CLS_NONE:
                     pygame.draw.circle(surf, (*CLS_COLORS[c], 220), self.w2s(e), 3)
-
-    def _lights(self, S, pos, th, L, Wd, braking, blinker, agent=False):
-        f = np.array([math.cos(th), math.sin(th)])
-        r = np.array([-f[1], f[0]])
-        p = np.array(pos)
-        if braking:
-            for s in (-1, 1):
-                q = self.w2s(p - f * (L / 2 - 0.15) + r * s * (Wd / 2 - 0.35))
-                pygame.draw.circle(S, (255, 40, 40), q, 3)
-                gs = self._glow((255, 30, 30), 9)
-                S.blit(gs, (q[0] - 9, q[1] - 9), special_flags=pygame.BLEND_RGBA_ADD)
-        if agent:
-            for s in (-1, 1):   # headlights
-                q = self.w2s(p + f * (L / 2 - 0.1) + r * s * (Wd / 2 - 0.35))
-                gs = self._glow((90, 90, 70), 8)
-                S.blit(gs, (q[0] - 8, q[1] - 8), special_flags=pygame.BLEND_RGBA_ADD)
-        if blinker and (self.blink_t % 0.7) < 0.35:
-            s = 1 if blinker == "R" else -1
-            for fo in (L / 2 - 0.2, -(L / 2 - 0.2)):
-                q = self.w2s(p + f * fo + r * s * (Wd / 2 - 0.1))
-                pygame.draw.circle(S, (255, 170, 30), q, 3)
-                gs = self._glow((255, 140, 0), 10)
-                S.blit(gs, (q[0] - 10, q[1] - 10), special_flags=pygame.BLEND_RGBA_ADD)
 
     def _glow(self, col, r):
         k = ("glow", col, r)
