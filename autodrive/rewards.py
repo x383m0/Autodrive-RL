@@ -45,7 +45,7 @@ import yaml
 # change of acceleration in one 0.1 s step, and the steering rack speed.
 MAX_JERK = (3.5 + 8.0) / 0.1          # m/s^3
 MAX_STEER_RATE = 2.094                # rad/s (120 deg/s)
-KMH_TERMS = ("speeding", "speed_bonus")
+KMH_TERMS = ("speeding", "speed_bonus")       # approach_speed is new in format 3 (already km/h)
 FORMAT = 3          # 3: speeding / speed_bonus count per km/h (2 and older: per m/s, converted)
 
 # name: (usual sign, kind, short description)
@@ -62,6 +62,7 @@ TERMS = {
     "pedestrian_proximity": (-1, "step",  "closeness (0-1) to a pedestrian while moving"),
     "crosswalk_yield":      (-1, "event", "drove over a crosswalk a pedestrian was using"),
     "speeding":             (-1, "step",  "per km/h above the speed limit (+ tolerance)"),
+    "approach_speed":       (-1, "step",  "per km/h above the advised speed when approaching the spot (slows to walking pace)"),
     "red_light":            (-1, "event", "crossed a stop line on red"),
     "stop_sign":            (-1, "event", "rolled through a stop sign without stopping"),
     "lane_deviation":       (-1, "step",  "per metre from the lane centre / planned path (beyond deadband)"),
@@ -78,7 +79,8 @@ TERMS = {
 TITLES = {
     "progress": "Driving toward the spot", "goal_reached": "Parked", "parking_precision": "Parked neatly",
     "collision": "Crash", "pedestrian_hit": "Hit a pedestrian", "pedestrian_proximity": "Too close to people",
-    "crosswalk_yield": "Did not let someone cross", "speeding": "Speeding", "red_light": "Ran a red light",
+    "crosswalk_yield": "Did not let someone cross", "speeding": "Speeding",
+    "approach_speed": "Arriving too fast", "red_light": "Ran a red light",
     "stop_sign": "Rolled a stop sign", "lane_deviation": "Out of the lane", "off_road": "Wheels off the road",
     "comfort": "Jerky driving", "stall": "Standing still for no reason", "time": "Time passing",
     "off_route": "Got lost (off the route)", "stuck": "Stuck (12 s still)", "speed_bonus": "Speed bonus",
@@ -88,7 +90,8 @@ TITLES = {
 SHORT_TITLES = {
     "progress": "Toward the spot", "goal_reached": "Parked", "parking_precision": "Parked neatly",
     "collision": "Crash", "pedestrian_hit": "Hit a pedestrian", "pedestrian_proximity": "Close to people",
-    "crosswalk_yield": "Crosswalk", "speeding": "Speeding", "red_light": "Red light", "stop_sign": "Stop sign",
+    "crosswalk_yield": "Crosswalk", "speeding": "Speeding", "approach_speed": "Arriving too fast",
+    "red_light": "Red light", "stop_sign": "Stop sign",
     "lane_deviation": "Out of lane", "off_road": "Off the road", "comfort": "Jerky driving",
     "stall": "Standing still", "time": "Time", "off_route": "Got lost", "stuck": "Stuck",
     "speed_bonus": "Speed bonus",
@@ -115,6 +118,7 @@ DEFAULT_TERMS = {
     "pedestrian_proximity": dict(enabled=True, weight=-0.1),
     "crosswalk_yield": dict(enabled=True, weight=-10.0),
     "speeding": dict(enabled=True, weight=-0.014),
+    "approach_speed": dict(enabled=True, weight=-0.014),
     "red_light": dict(enabled=True, weight=-20.0),
     "stop_sign": dict(enabled=True, weight=-10.0),
     "lane_deviation": dict(enabled=True, weight=-0.03),
@@ -259,6 +263,9 @@ def parse_config(user: dict, where="config", allow_empty=False) -> dict:
         if k not in DEFAULT_SETTINGS:
             raise RewardConfigError(f"Unknown setting '{k}' in {where}.\nValid settings: {', '.join(DEFAULT_SETTINGS)}")
         cfg["settings"][k] = v
+    if fmt < 3 and cfg["terms"]["speeding"]["enabled"] and "approach_speed" not in (user.get("terms") or {}):
+        # older files: speeding also covered the advised slow-down before the spot
+        cfg["terms"]["approach_speed"] = dict(cfg["terms"]["speeding"])
     custom = user.get("custom") or []
     if not isinstance(custom, list):
         raise RewardConfigError(f"'custom' in {where} must be a list of custom rewards.")
@@ -363,6 +370,13 @@ class RewardComputer:
         sig["crosswalk_yield"] = float(m["crosswalk_violation"])
         tol = st["speed_tolerance_kmh"] / 3.6
         sig["speeding"] = 3.6 * max(0.0, m["speed"] - (m["limit"] + tol))      # km/h over
+        # the part of the overspeed that comes only from the ADVISED speed (it
+        # drops to walking pace before the spot; in the game the posted limit is
+        # higher). speeding + approach_speed with equal weights == speeding
+        # against the advised speed, i.e. exactly the pre-format-3 behaviour.
+        adv = m.get("advice", m["limit"])
+        sig["approach_speed"] = 3.6 * max(0.0, m["speed"] - (adv + tol)) - sig["speeding"]
+        sig["approach_speed"] = max(0.0, sig["approach_speed"])
         sig["red_light"] = float(m["red_violation"])
         sig["stop_sign"] = float(m["stop_violation"])
         # distance from the planned path: the lane centre on streets, the

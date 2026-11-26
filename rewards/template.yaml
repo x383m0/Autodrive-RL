@@ -76,6 +76,12 @@ terms:
     enabled: false
     weight: 0
 
+  # [-] Per step: km/h above the ADVISED speed for reaching the spot (it drops to
+  #     walking pace before the slot and in the lot). Teaches braking in time to park.
+  approach_speed:
+    enabled: false
+    weight: 0
+
   # [-] Running a red light.                                 suggested: -20
   red_light:
     enabled: false

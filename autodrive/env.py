@@ -27,8 +27,6 @@ from __future__ import annotations
 
 from collections import deque
 
-import os
-
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
@@ -160,7 +158,7 @@ class AutoDriveEnv(gym.Env):
         # The POSTED limit - shown on the speedometer, used by the speeding reward,
         # the stats and the score - only includes it outside the game's
         # "no speed limits except school zones" rule.
-        if p.get("no_limits") and not os.environ.get("AUTODRIVE_AB_TAPER"):   # (A/B switch, temporary)
+        if p.get("no_limits"):        # game rule: the only posted limits are school zones
             posted = np.where(self.route.school, posted, 30.0)
             self.route.posted = posted
         else:
@@ -484,7 +482,7 @@ class AutoDriveEnv(gym.Env):
                                          off_route, stuck) if self.rewarder.custom else None
         return dict(meas=meas, ds=ds, parked=parked, stuck=stuck, park_err=park_err, collision=coll, ped_hit=ped_hit,
                     ped_close=ped_close, crosswalk_violation=cw_violation, speed=car.v,
-                    limit=limit, red_violation=red_v, stop_violation=stop_v, lat=lat,
+                    limit=limit, advice=route.limit(s_new), red_violation=red_v, stop_violation=stop_v, lat=lat,
                     on_street=on_street, offroad_frac=offroad, jerk=jerk,
                     steer_rate=steer_rate, legit_wait=legit, off_route=off_route)
 

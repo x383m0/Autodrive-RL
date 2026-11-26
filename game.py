@@ -77,6 +77,10 @@ HELP = {
     "speeding": ("Every step, for each km/h above the speed limit (the first 3 km/h over are free). "
                  "In this game only school zones have a limit.",
                  "With 1: 10 km/h too fast = 10 points per step (100 per second)."),
+    "approach_speed": ("Every step while the car drives faster than the advised speed for reaching the spot: "
+                       "the advice drops to walking pace in the last metres before the spot and in the parking "
+                       "lot (the first 3 km/h over are free). It teaches the car to brake in time to park.",
+                       "With 1: 10 km/h too fast near the spot = 10 points per step (100 per second)."),
     "red_light": ("Once, each time the car crosses the stop line while the light is red.",
                   "With 1: 1 point each time."),
     "stop_sign": ("Once, each time the car passes a stop sign without coming to a stop (under 2 km/h).",

@@ -125,3 +125,23 @@ def test_presets_and_template_load():
     for f in ["rewards.yaml", "rewards/balanced.yaml", "rewards/cautious.yaml", "rewards/aggressive.yaml"]:
         load_reward_config(ROOT / f)
     load_reward_config(ROOT / "rewards/template.yaml", allow_empty=True)
+
+
+def test_approach_speed_plus_speeding_equals_old_speeding():
+    w = -0.02
+    cfg = parse_config({"format": 3, "terms": {"speeding": {"weight": w}, "approach_speed": {"weight": w}}})
+    # game street (posted 108 km/h), advice 20 km/h before the spot, car at 43 km/h -> 20 km/h over (+3 free)
+    m = base_m(speed=43 / 3.6, limit=30.0, advice=20 / 3.6)
+    _, parts, _ = RewardComputer(cfg)(m)
+    assert parts["speeding"] == 0
+    assert parts["approach_speed"] == pytest.approx(w * 20, rel=1e-6)
+    # school zone 30 km/h, advice 20, car 43 -> speeding 10 over, approach adds the other 10
+    m = base_m(speed=43 / 3.6, limit=30 / 3.6, advice=20 / 3.6)
+    _, parts, _ = RewardComputer(cfg)(m)
+    assert parts["speeding"] + parts["approach_speed"] == pytest.approx(w * 20, rel=1e-6)
+
+
+def test_old_files_get_approach_speed_from_speeding():
+    old = parse_config({"format": 2, "terms": {"speeding": {"weight": -0.05}}})
+    assert old["terms"]["approach_speed"]["enabled"]
+    assert old["terms"]["approach_speed"]["weight"] == pytest.approx(-0.05 / 3.6)

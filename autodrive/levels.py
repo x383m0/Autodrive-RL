@@ -60,8 +60,8 @@ _RULE_TERMS = ["speeding", "red_light", "stop_sign"]
 _PED_TERMS = ["pedestrian_hit", "pedestrian_proximity", "crosswalk_yield"]
 # "stuck" is not offered in the game: "stall" (standing still for no reason)
 # covers the same behaviour, and the drive still ends after 12 s of it anyway
-TERMS_1 = ["progress", "goal_reached", "parking_precision", "collision", "off_route", "off_road",
-           "lane_deviation", "comfort", "stall", "time", "speed_bonus"]
+TERMS_1 = ["progress", "goal_reached", "parking_precision", "approach_speed", "collision", "off_route",
+           "off_road", "lane_deviation", "comfort", "stall", "time", "speed_bonus"]
 TERMS_2 = TERMS_1
 TERMS_5 = TERMS_1 + _RULE_TERMS
 TERMS_6 = TERMS_5 + _PED_TERMS
