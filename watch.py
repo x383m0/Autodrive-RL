@@ -164,7 +164,9 @@ class Spectator:
     def _publish(self, frame):
         from PIL import Image
         buf = io.BytesIO()
-        Image.fromarray(frame).save(buf, "JPEG", quality=self.quality)
+        # subsampling=0: full-resolution colour (4:4:4). The default halves colour
+        # resolution, which blurs coloured edges and text the most.
+        Image.fromarray(frame).save(buf, "JPEG", quality=self.quality, subsampling=0)
         with self.cond:
             self.jpeg = buf.getvalue()
             self.frame_id += 1

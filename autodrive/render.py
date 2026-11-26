@@ -746,7 +746,13 @@ class Renderer:
         """Drawing scale for the world: the zoom, capped by the static image size."""
         Wm = env.city.width + 2 * MARGIN
         Hm = env.city.height + 2 * MARGIN
-        return min(PPM * self.zoom, self._ppm_cap(env))
+        return min(self._ppm_wanted(), self._ppm_cap(env))
+
+    def _ppm_wanted(self):
+        """Pixels per metre: the zoom, scaled with the output height (a bigger
+        view draws the city bigger and sharper with the same framing, instead
+        of the same tiny cars over a wider area)."""
+        return PPM * self.zoom * self.hk
 
     @staticmethod
     def _ppm_cap(env):
@@ -760,7 +766,7 @@ class Renderer:
         if (self.city_id is not None and self.city_id[:2] == (env.city_seed, id(env.city))
                 and time.time() - self._zoom_t < ZOOM_SETTLE_S):
             ppm = self.city_id[2]                 # zooming right now: reuse the image, redraw when it stops
-        f = PPM * self.zoom / ppm                # >1 only when zoomed past the static-size cap
+        f = self._ppm_wanted() / ppm             # >1 only when zoomed past the static-size cap
         Wf, Hf = self._full
         wW, wH = max(int(Wf / f), 64), max(int(Hf / f), 36)
         if (wW, wH) != getattr(self, "_world_size", None):
