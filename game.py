@@ -50,29 +50,58 @@ SOUNDS = ROOT / "assets" / "sounds"
 PAGE = ROOT / "assets" / "game.html"
 
 from autodrive.levels import BY_ID, LEVELS, run_test                         # noqa: E402
-from autodrive.rewards import (MEASUREMENTS, OPERATORS, TERMS, RewardConfigError,  # noqa: E402
+from autodrive.rewards import (FORMAT, MEASUREMENTS, OPERATORS, TERMS, TITLES, RewardConfigError,  # noqa: E402
                                parse_config, to_yaml_dict)
 
 # plain-English help for each built-in reward (no numbers on purpose)
+# What each reward card says: when the points come, and what the number means
+# with 1 as the example (no suggested values - you choose them). 1 step = 0.1 s.
 HELP = {
-    "progress": "Points for every metre the car drives along its GPS route (driving backwards gives the opposite).",
-    "goal_reached": "Points once, when the car ends the drive parked inside the spot.",
-    "parking_precision": "Points once when parked, scaled by how centred and straight the car is (perfect = full points).",
-    "collision": "Points once when the car hits a car, a parked car or a building. The drive ends.",
-    "pedestrian_hit": "Points once when the car hits a pedestrian. The drive ends.",
-    "pedestrian_proximity": "Points every step, scaled by how close (0-1) a pedestrian is while the car is moving.",
-    "crosswalk_yield": "Points once each time the car drives over a crosswalk someone is using.",
-    "speeding": "Points every step for each m/s above the speed limit (only school zones have one in this game).",
-    "red_light": "Points once each time the car crosses a stop line on red.",
-    "stop_sign": "Points once each time the car passes a stop sign without stopping.",
-    "lane_deviation": "Points every step for each metre the car is away from its lane / planned path.",
-    "off_road": "Points every step while wheels are on the grass or sidewalk (scaled by how much of the car).",
-    "comfort": "Points every step for jerky driving: sudden braking/accelerating and fast steering.",
-    "stall": "Points every step while the car stands still for no reason.",
-    "time": "Points every single step, whatever happens.",
-    "off_route": "Points once when the car wanders more than 6 m from its route. The drive ends.",
-    "stuck": "Points once when the car has stood still for 12 s for no reason. The drive ends.",
-    "speed_bonus": "Points every step for each m/s of speed, wherever the car is going.",
+    "progress": ("Every step, for each metre the car gets closer to the parking spot along its GPS route. "
+                 "Driving the wrong way gives the opposite.",
+                 "With 1: +1 point per metre - a 250 m drive earns about 250."),
+    "goal_reached": ("Once, when the car stops inside the parking spot (the drive ends there).",
+                     "With 1: 1 point for parking."),
+    "parking_precision": ("Once, when the car parks: the full number for a perfectly centred and straight car, "
+                          "less for a sloppy park.",
+                          "With 1: up to 1 point."),
+    "collision": ("Once, when the car hits another car, a parked car or a building. The drive ends.",
+                  "With 1: 1 point per crash - use a negative number to punish it."),
+    "pedestrian_hit": ("Once, when the car hits a person. The drive ends.",
+                       "With 1: 1 point - use a negative number to punish it."),
+    "pedestrian_proximity": ("Every step while the car drives near a person: the full number when touching, "
+                             "nothing at 4 m or more, and less when going slowly.",
+                             "With 1: up to 1 point per step (10 per second) when brushing past someone."),
+    "crosswalk_yield": ("Once, each time the car drives onto a crosswalk while a person is crossing on it.",
+                        "With 1: 1 point each time."),
+    "speeding": ("Every step, for each km/h above the speed limit (the first 3 km/h over are free). "
+                 "In this game only school zones have a limit.",
+                 "With 1: 10 km/h too fast = 10 points per step (100 per second)."),
+    "red_light": ("Once, each time the car crosses the stop line while the light is red.",
+                  "With 1: 1 point each time."),
+    "stop_sign": ("Once, each time the car passes a stop sign without coming to a stop (under 2 km/h).",
+                  "With 1: 1 point each time."),
+    "lane_deviation": ("Every step, for each metre the car is away from the middle of its lane "
+                       "(or from the GPS path in the parking lot). The first 0.4 m are free.",
+                       "With 1: 1 m off = 0.6 points per step (6 per second)."),
+    "off_road": ("Every step while the car is on the grass or the sidewalk: the full number when completely off, "
+                 "part of it when only some wheels are.",
+                 "With 1: completely off the road = 1 point per step (10 per second)."),
+    "comfort": ("Every step, for harsh braking, harsh accelerating and fast steering "
+                "(0 when smooth, up to 2 when very jerky).",
+                "With 1: up to 2 points per step for very jerky driving."),
+    "stall": ("Every step while the car stands still when nothing stops it. Waiting at a red light, a stop sign "
+              "or behind another car does not count. After 12 s of this the drive ends anyway.",
+              "With 1: 1 point per step (10 per second) of standing around."),
+    "time": ("Every step, whatever happens: the price of time, so finishing sooner costs less.",
+             "With 1: 1 point per step - a 60 s drive adds up to 600."),
+    "off_route": ("Once, when the car ends up more than 6 m away from its GPS route. The drive ends.",
+                  "With 1: 1 point - use a negative number to punish it."),
+    "stuck": ("Once, when the car has stood still for 12 s for no reason. The drive ends.",
+              "With 1: 1 point."),
+    "speed_bonus": ("Every step, for each km/h of speed, wherever the car goes - careful, it also pays for "
+                    "driving in circles.",
+                    "With 1: at 36 km/h = 36 points per step."),
 }
 
 
@@ -169,6 +198,7 @@ class Game:
     def __init__(self, fps, quality):
         self.parent, self.base_minutes = None, 0.0   # car this training continues from
         self.view_opts = {}                  # last zoom / screen size sent by the page
+        self.view_mode = "route"             # during training: the level's real route, or "practice"
         self.fps, self.quality = fps, quality
         self.progress = _load(PROGRESS, {})
         self.library = _load(LIBRARY, [])
@@ -232,7 +262,7 @@ class Game:
         """Add or replace a custom reward (live link: levels use the latest version)."""
         item = {k: item.get(k) for k in ("id", "name", "when", "give", "times", "paid")}
         item["id"] = item["id"] or uuid.uuid4().hex[:10]
-        parse_config({"format": 2, "custom": [item]}, "your custom reward", allow_empty=True)  # validate
+        parse_config({"format": FORMAT, "custom": [item]}, "your custom reward", allow_empty=True)  # validate
         self.library = [x for x in self.library if x["id"] != item["id"]] + [item]
         _save(LIBRARY, self.library)
         return item
@@ -245,7 +275,7 @@ class Game:
     def build_config(self, lid, recipe):
         """recipe = {terms: {name: points}, custom_ids: [...]} -> validated config."""
         lib = {x["id"]: x for x in self.library}
-        user = {"format": 2, "name": f"level{lid}",
+        user = {"format": FORMAT, "name": f"level{lid}",
                 "terms": {k: {"enabled": True, "weight": float(v)} for k, v in recipe.get("terms", {}).items()
                           if k in TERMS and k in BY_ID[lid]["terms"]},          # only this level's rewards
                 "custom": [{k: lib[i][k] for k in ("name", "when", "give", "times", "paid")}
@@ -308,9 +338,22 @@ class Game:
             p = self.progress.setdefault(str(lid), {})
             p["attempts"] = p.get("attempts", 0) + 1          # the live view is now "unlocked"
             _save(PROGRESS, self.progress)
-        self._set_spectator(run, lv["curriculum"], follow=True, stage=0)
+        self._training_view(lv, run)
         threading.Thread(target=self._watch_training, args=(lv, run), daemon=True).start()
         return "ok"
+
+    def _training_view(self, lv, run):
+        """While training, the live view drives the car-in-training on the level's
+        REAL route (what it will be tested on), or on the practice lesson."""
+        if self.view_mode == "practice":
+            self._set_spectator(run, lv["curriculum"], follow=True, stage=0)
+        else:
+            self._set_spectator(run, [lv["test"]], follow=True, stage=0)
+
+    def set_view_mode(self, mode):
+        self.view_mode = "practice" if mode == "practice" else "route"
+        if self.phase == "training" and self.run_dir is not None:
+            self._training_view(BY_ID[self.level_id], self.run_dir)
 
     def stop(self):
         proc, run = self.proc, self.run_dir
@@ -392,7 +435,7 @@ class Game:
             "curve": [[float(r["wall_s"]), float(r["success_rate_100"])] for r in rows][-300:],
             "steps": int(rows[-1]["timesteps"]) if rows else 0,
             "test": [self.test_done, self.test_total], "result": self.result, "log": self.log_tail[-6:],
-            "viewer": self.sp.policy_src if self.sp else None,
+            "viewer": self.sp.policy_src if self.sp else None, "view_mode": self.view_mode,
             "progress": self.progress, "library": self.library,
         }
 
@@ -416,8 +459,8 @@ def catalog():
                     "new_terms": [t for t in lv["terms"] if lv["id"] > 1 and t not in BY_ID[lv["id"] - 1]["terms"]],
                     "score": lv["score"], "rules": bool(lv.get("rules")), "minutes": lv["minutes"],
                     "stars": list(lv["stars"])} for lv in LEVELS],
-        "terms": [{"name": k, "paid": "once" if TERMS[k][1] == "event" else "every step",
-                   "help": HELP[k]} for k in TERMS],
+        "terms": [{"name": k, "title": TITLES[k], "paid": "once" if TERMS[k][1] == "event" else "every step",
+                   "help": HELP[k][0], "example": HELP[k][1]} for k in TERMS],
         "measurements": [{"name": k, "label": v[0], "unit": v[1], "type": v[2], "group": v[3]}
                          for k, v in MEASUREMENTS.items()],
         "operators": list(OPERATORS),
@@ -458,6 +501,9 @@ def make_handler(game: Game):
                     msg = game.start(int(body["level"]), body.get("recipe", {}),
                                      float(np.clip(float(body["minutes"]), 0.5, 120)), start_from)
                     self._json({"status": msg})
+                elif u.path == "/api/viewmode":
+                    game.set_view_mode(str(body.get("mode", "route")))
+                    self._json({"status": "ok"})
                 elif u.path == "/api/stop":
                     game.stop()
                     self._json({"status": "ok"})

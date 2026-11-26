@@ -45,7 +45,11 @@ _ROAD = dict(world="road", lot_occ=0.3)
 # level 6+: well-behaved traffic and pedestrians (no rushers/erratic drivers,
 # no jaywalkers, no kids running out); level 7 turns these on
 _CALM = dict(reckless=0.0, hard_brake=0.0, jaywalk=0.0, n_kids=0)
-_RUSH = dict(hops=(1, 3), controls=True, parked=0.3, school=0.2, n_cars=8, n_peds=14, **_CALM)
+# a "real" city drive: some street before the lot, and (with controls) at least
+# one traffic light or stop sign on the way - see AutoDriveEnv._route_ok
+_TRIP = dict(min_street_m=90.0)
+_TRIP_RULES = dict(min_street_m=90.0, min_controls=1)
+_RUSH = dict(hops=(1, 3), controls=True, parked=0.3, school=0.2, n_cars=8, n_peds=14, **_CALM, **_TRIP_RULES)
 _PAD = dict(world="road", pad_only=True, lot_occ=0.4)      # level 1: just a parking pad
 
 # Built-in rewards available in a level. Most are there from level 1; rewards
@@ -54,8 +58,10 @@ _PAD = dict(world="road", pad_only=True, lot_occ=0.4)      # level 1: just a par
 #   level 6 (pedestrians):   pedestrian_hit, pedestrian_proximity, crosswalk_yield
 _RULE_TERMS = ["speeding", "red_light", "stop_sign"]
 _PED_TERMS = ["pedestrian_hit", "pedestrian_proximity", "crosswalk_yield"]
+# "stuck" is not offered in the game: "stall" (standing still for no reason)
+# covers the same behaviour, and the drive still ends after 12 s of it anyway
 TERMS_1 = ["progress", "goal_reached", "parking_precision", "collision", "off_route", "off_road",
-           "lane_deviation", "comfort", "stall", "stuck", "time", "speed_bonus"]
+           "lane_deviation", "comfort", "stall", "time", "speed_bonus"]
 TERMS_2 = TERMS_1
 TERMS_5 = TERMS_1 + _RULE_TERMS
 TERMS_6 = TERMS_5 + _PED_TERMS
@@ -91,7 +97,7 @@ LEVELS = [
          terms=TERMS_2, stars=(550, 700, 850),
          curriculum=_park_lessons([(1, 6), (4, 15), (12, 30), (25, 70)])
          + [_stage("empty streets", hops=(0, 1), parked=0.3)],
-         test=_stage("Into town (test)", hops=(1, 2), parked=0.3)),
+         test=_stage("Into town (test)", hops=(1, 2), parked=0.3, **_TRIP)),
     dict(id=5, name="Rules of the road", available=True, score="speed", rules=True, minutes=15,
          brief="Traffic lights, stop signs and school zones appear. School zones are the only "
                "places with a speed limit. Every rule you break costs points.",
@@ -99,7 +105,8 @@ LEVELS = [
          curriculum=_park_lessons([(1, 6), (4, 15), (12, 30), (25, 70)])
          + [_stage("empty streets", hops=(0, 1), parked=0.3),
             _stage("rules", hops=(1, 3), controls=True, parked=0.3, school=0.2)],
-         test=_stage("Rules of the road (test)", hops=(1, 3), controls=True, parked=0.3, school=0.2)),
+         test=_stage("Rules of the road (test)", hops=(1, 3), controls=True, parked=0.3, school=0.2,
+                     **_TRIP_RULES)),
     dict(id=6, name="Rush hour", available=True, score="speed", rules=True, minutes=25,
          brief="Other cars and people on the sidewalks and crosswalks. Everyone behaves - "
                "no reckless drivers, no jaywalkers - but a crash or a hit pedestrian ends the drive. "

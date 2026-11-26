@@ -19,7 +19,7 @@ reward this step = sum over your rewards of   points x signal
   negative = it loses points. `collision: -50` punishes crashing; `+50` would
   reward it. Nothing is flipped behind your back.
 - **"Every step" rewards** pay points x an amount each 0.1 s (progress: per
-  metre; speeding: per m/s over the limit; stall: 1 per step). Their total
+  metre; speeding: per km/h over the limit; stall: 1 per step). Their total
   grows with time.
 - **"Once" rewards** pay their points when something happens (a red light, a
   collision, parking).
@@ -29,9 +29,12 @@ reward this step = sum over your rewards of   points x signal
 The HUD (right panel of the live view) and `episodes.csv` show each reward's
 running total, so you can always see *where* the points came from.
 
-In YAML files this is **format 2** (`format: 2` at the top). Older files
-without that line used positive weights with fixed directions; they are
-converted automatically when loaded.
+In YAML files this is **format 3** (`format: 3` at the top): speeds are in
+km/h, like the speedometer (`speeding` = points per km/h over the limit,
+`speed_bonus` = points per km/h of speed). Format 2 files counted those two
+per m/s and older files (no `format:` line) used positive weights with fixed
+directions; both are converted automatically when loaded, so they behave
+exactly as before.
 
 ## 2. Think in a common currency
 
@@ -43,7 +46,7 @@ else in "metres of driving":
 |---|---|
 | `collision: -50` | a crash is as bad as losing 500 m of driving |
 | `red_light: -20` | running a red costs as much as 200 m |
-| `speeding: -0.05` per m/s | 10 km/h over (2.8 m/s) costs 0.14/step, more than the 0.03/step of extra progress it buys, so speeding doesn't pay |
+| `speeding: -0.014` per km/h | 10 km/h over costs 0.14/step, more than the 0.03/step of extra progress it buys, so speeding doesn't pay |
 | `stall: -0.03` per step | standing still for no reason costs 0.3 points per second |
 
 If a penalty is cheaper than the progress it saves, the car **will** break the
@@ -60,7 +63,7 @@ rule. That is not a bug in the car; it's the deal you offered it.
 | `pedestrian_hit` | once | ends episode | -100 | -500 to -100 | — | (keep it the worst thing) |
 | `pedestrian_proximity` | every step | fast near people | -0.1 | -0.5 to -0.05 | brushes past people | crawls through crowds |
 | `crosswalk_yield` | once | drove over an occupied crosswalk | -10 | -30 to -5 | doesn't yield | — |
-| `speeding` | every step | m/s over limit + tolerance | -0.05 | -0.3 to -0.02 | speeds | drives well under the limit |
+| `speeding` | every step | km/h over limit + tolerance | -0.014 | -0.08 to -0.005 | speeds | drives well under the limit |
 | `red_light` | once | crossed stop line on red | -20 | -100 to -10 | runs reds | brakes hard at every yellow |
 | `stop_sign` | once | didn't stop (< 0.5 m/s) | -10 | -50 to -5 | rolls stops | — |
 | `lane_deviation` | every step | metres from the lane centre / planned path beyond deadband | -0.03 | -0.1 to -0.01 | wobbles, cuts corners | twitchy steering |
@@ -70,7 +73,7 @@ rule. That is not a bug in the car; it's the deal you offered it.
 | `time` | every step | flat cost of existing | -0.005 | -0.02 to -0 | dawdles | rushes, risks more |
 | `off_route` | once | > 6 m from the route, ends episode | -20 | -50 to -10 | wanders off | — |
 | `stuck` | once | idle 12 s with no reason, ends episode | -20 | -50 to -10 | **freezes when in trouble** (4.7) | — |
-| `speed_bonus` | every step | raw speed anywhere | off | off! | — | drives fast circles (see 4.3) |
+| `speed_bonus` | every step | raw speed in km/h, anywhere | off | off! | — | drives fast circles (see 4.3) |
 
 \* `stall` never punishes legitimate waiting (red light, stop sign, car or
 pedestrian ahead), so it is safe to raise. The simulator uses ground truth to
@@ -195,7 +198,7 @@ When no built-in reward says what you mean, write a rule. In the game use
 **+ Add reward -> Create custom reward...**; in YAML add a `custom:` list:
 
 ```yaml
-format: 2
+format: 3
 terms:
   progress: {enabled: true, weight: 0.1}
 custom:
@@ -247,7 +250,7 @@ truth: a kid hidden behind a parked car counts only once it is visible.
 | Fear | `collision: -500` | slower learning, freezing in the lot (4.2) |
 | No stall | `stall` off | does it learn to idle on the road? |
 | Cheap rules | `red_light: -1`, `stop_sign: -1` | violations per km in `eval/summary.md` |
-| Speed demon | `speed_bonus: 0.2` on | circles / speeding (4.3) |
+| Speed demon | `speed_bonus: 0.05` (per km/h) on | circles / speeding (4.3) |
 | Smooth operator | `comfort: -0.05` | smoother ride, or sitting still? |
 | School zones | `speed_tolerance_kmh: 0`, `speeding: -0.3` | "worst school-zone overspeed" |
 | Strict | `terminate_on_red_light: true` | fewer reds, but slower learning? |

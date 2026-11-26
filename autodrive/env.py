@@ -135,9 +135,15 @@ class AutoDriveEnv(gym.Env):
                              school_prob=p["school"], lot_occupancy=p["lot_occ"])
         if self.city.target_slot is None:
             self.city.choose_target_slot(rng, between_cars=between_cars or rng.random() < 0.3)
-        self.route, self.start_edge = self.city.build_route(rng, *p["hops"],
-                                                            start_edge=start_edge,
-                                                            start_s=start_s)
+        # some stages want a "real" drive: enough street before the lot and at
+        # least one traffic light / stop sign (otherwise the car can start right
+        # in front of the parking lot and the drive shows nothing). Re-draw a few times.
+        for _try in range(25):
+            self.route, self.start_edge = self.city.build_route(rng, *p["hops"],
+                                                                start_edge=start_edge,
+                                                                start_s=start_s)
+            if start_edge is not None or self._route_ok(p):
+                break
         if p.get("no_limits"):
             # game rule: no speed limits on the streets, except school zones
             # (the parking lot keeps its creeping speed)
@@ -164,6 +170,13 @@ class AutoDriveEnv(gym.Env):
                                       reckless=float(p.get("reckless", 1.0)))
         self.peds = PedestrianManager(self.city, rng, p["n_peds"], jaywalk_prob=p["jaywalk"],
                                       n_kids=p["n_kids"])
+
+    def _route_ok(self, p):
+        r = self.route
+        if float(r.in_lot_s) < float(p.get("min_street_m", 0.0)):
+            return False
+        n_ctrl = sum(ev["kind"] in ("light", "stop") for ev in r.events)
+        return n_ctrl >= int(p.get("min_controls", 0))
 
     def _post_build(self):
         """Populate dynamic actors and reset all episode book-keeping."""

@@ -58,8 +58,9 @@ h3 { font-size:16px; margin:0; }
          background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
 .ritem .nm { font-weight:700; }
 .ritem .help { color:var(--dim); font-size:12px; }
+.ritem .ex, .pcard .ex { color:#7f8fa6; font-size:12px; margin-top:3px; font-style:italic; }
 .ritem.invalid { border-color:var(--bad); }
-.tag { font-size:11px; color:var(--dim); border:1px solid var(--line); border-radius:6px; padding:0 6px; margin-left:6px; font-weight:400; }
+.tag { white-space:nowrap; font-size:11px; color:var(--dim); border:1px solid var(--line); border-radius:6px; padding:0 6px; margin-left:6px; font-weight:400; }
 .tag.custom { color:var(--gold); border-color:#5b4c1c; }
 .pts { display:flex; align-items:center; gap:6px; }
 .pts input { width:96px; text-align:right; }
@@ -207,6 +208,7 @@ svg.starico { color:#5a6070; } svg.starico.on { color:var(--gold); }
           <span class="dim">Speed</span>
           <select id="speed"><option value="0.5">0.5</option><option value="1" selected>1</option><option value="2">2</option><option value="4">4</option></select>
           <button id="next">Next road</button>
+          <button id="viewMode" hidden title="what the live view shows while training">Show practice lesson</button>
           <span class="zoomctl stepper" title="zoom (or scroll on the view)"><button type="button" id="liveOut" title="zoom out"></button><span class="zl" id="liveZl" title="reset">100%</span><button type="button" id="liveIn" title="zoom in"></button></span>
           <button id="fsExit" class="ghost" hidden>Exit fullscreen</button>
         </div>
@@ -397,7 +399,7 @@ function renderRecipe() {
   for (const n of names) {
     const t = CAT.terms.find(x => x.name === n);
     const d = document.createElement('div'); d.className = 'ritem';
-    d.innerHTML = `<div><div class="nm">${n.replace(/_/g, ' ')}<span class="tag">${t.paid}</span></div><div class="help">${esc(t.help)}</div></div>
+    d.innerHTML = `<div><div class="nm">${esc(t.title || n.replace(/_/g, ' '))}<span class="tag">${t.paid}</span></div><div class="help">${esc(t.help)}</div><div class="ex">${esc(t.example || '')}</div></div>
       <div class="pts"><input type="number" step="any" placeholder="points" value="${RECIPE.terms[n] ?? ''}"><span class="dim">points</span></div>
       <button class="ghost" title="remove">✕</button>`;
     const inp = d.querySelector('input');
@@ -425,7 +427,7 @@ function renderPicker() {
     const added = t.name in RECIPE.terms;
     const isNew = LV().new_terms.includes(t.name);
     const c = document.createElement('div'); c.className = 'pcard' + (added ? ' added' : '');
-    c.innerHTML = `<div class="nm">${t.name.replace(/_/g, ' ')}<span class="tag">${t.paid}</span>${isNew ? '<span class="tag new">new</span>' : ''}${added ? '<span class="tag">added</span>' : ''}</div><div class="help">${esc(t.help)}</div>`;
+    c.innerHTML = `<div class="nm">${esc(t.title || t.name.replace(/_/g, ' '))}<span class="tag">${t.paid}</span>${isNew ? '<span class="tag new">new</span>' : ''}${added ? '<span class="tag">added</span>' : ''}</div><div class="help">${esc(t.help)}</div><div class="ex">${esc(t.example || '')}</div>`;
     if (!added) c.onclick = () => { RECIPE.terms[t.name] = ''; $('pickModal').classList.remove('open'); renderRecipe();
       setTimeout(() => { const ins = $('rlist').querySelectorAll('input'); if (ins.length) ins[Object.keys(RECIPE.terms).indexOf(t.name)].focus(); }, 0); };
     $('pBuilt').appendChild(c);
@@ -541,6 +543,7 @@ $('train').onclick = async () => {
   if (r.status !== 'ok') $('msg').textContent = r.status; else refresh();
 };
 $('stop').onclick = () => post('/api/stop');
+$('viewMode').onclick = () => post('/api/viewmode', {mode: STATE && STATE.view_mode === 'practice' ? 'route' : 'practice'}).then(refresh);
 $('next').onclick = () => fetch('/control?cmd=next');
 $('speed').onchange = e => fetch('/control?cmd=speed&v=' + e.target.value);
 
@@ -635,9 +638,14 @@ function renderState() {
   $('train').disabled = busy; $('addBtn').disabled = busy;
   $('trainBox').hidden = !busy;
   $('viewSub').textContent = s.viewer || '';
+  $('viewMode').hidden = s.phase !== 'training';
+  $('viewMode').textContent = s.view_mode === 'practice' ? 'Show the real route' : 'Show practice lesson';
   if (s.phase === 'training') {
     $('viewTitle').textContent = 'Training - live'; $('phaseLbl').textContent = 'Training';
     $('stageLbl').textContent = s.stage ? 'practising: ' + s.stage : '';
+    $('viewSub').textContent = s.view_mode === 'practice'
+      ? 'showing the practice lesson: ' + (s.stage || '')
+      : 'showing the real route of this level, driven by the car as it learns';
     $('timebar').style.transform = `scaleX(${Math.min(s.elapsed / (s.minutes * 60), 1)})`;
     $('timeLbl').textContent = `${(s.elapsed / 60).toFixed(1)} / ${s.minutes} min · ${s.steps.toLocaleString()} practice steps`;
     drawChart(s.curve, s.minutes); $('log').textContent = s.log.join('\n');

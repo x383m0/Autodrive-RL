@@ -36,7 +36,19 @@ def test_old_format_converts_to_signed_points():
     cfg = load_reward_config(ROOT / "experiments/balanced_45min/reward_config.yaml")
     for k, t in DEFAULT_TERMS.items():
         if t["enabled"]:
-            assert cfg["terms"][k]["weight"] == pytest.approx(t["weight"]), k
+            assert cfg["terms"][k]["weight"] == pytest.approx(t["weight"], rel=0.01), k
+
+
+def test_speed_terms_now_per_kmh_and_old_files_keep_their_behaviour():
+    # format 2 counted per m/s: -0.05 per m/s == -0.05/3.6 per km/h
+    old = parse_config({"format": 2, "terms": {"speeding": {"weight": -0.05}}})
+    assert old["terms"]["speeding"]["weight"] == pytest.approx(-0.05 / 3.6)
+    new = parse_config({"format": 3, "terms": {"speeding": {"weight": -0.05}}})
+    assert new["terms"]["speeding"]["weight"] == pytest.approx(-0.05)
+    # 10 km/h over the limit (+ tolerance) -> 10 x weight
+    m = base_m(speed=(30 + 3 + 10) / 3.6, limit=30 / 3.6)
+    total, parts, _ = RewardComputer(new)(m)
+    assert parts["speeding"] == pytest.approx(-0.5, rel=1e-6)
 
 
 def test_number_is_points_given_any_sign():

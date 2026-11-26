@@ -45,7 +45,8 @@ import yaml
 # change of acceleration in one 0.1 s step, and the steering rack speed.
 MAX_JERK = (3.5 + 8.0) / 0.1          # m/s^3
 MAX_STEER_RATE = 2.094                # rad/s (120 deg/s)
-FORMAT = 2
+KMH_TERMS = ("speeding", "speed_bonus")
+FORMAT = 3          # 3: speeding / speed_bonus count per km/h (2 and older: per m/s, converted)
 
 # name: (usual sign, kind, short description)
 #   usual sign: whether people normally give it positive or negative points
@@ -60,7 +61,7 @@ TERMS = {
     "pedestrian_hit":       (-1, "event", "hit a pedestrian (episode ends)"),
     "pedestrian_proximity": (-1, "step",  "closeness (0-1) to a pedestrian while moving"),
     "crosswalk_yield":      (-1, "event", "drove over a crosswalk a pedestrian was using"),
-    "speeding":             (-1, "step",  "per m/s above the speed limit (+ tolerance)"),
+    "speeding":             (-1, "step",  "per km/h above the speed limit (+ tolerance)"),
     "red_light":            (-1, "event", "crossed a stop line on red"),
     "stop_sign":            (-1, "event", "rolled through a stop sign without stopping"),
     "lane_deviation":       (-1, "step",  "per metre from the lane centre / planned path (beyond deadband)"),
@@ -70,7 +71,27 @@ TERMS = {
     "time":                 (-1, "step",  "every step (1 per step)"),
     "off_route":            (-1, "event", "left the route by > off_route_distance (episode ends)"),
     "stuck":                (-1, "event", "stood still for stuck_seconds with no reason (episode ends)"),
-    "speed_bonus":          (+1, "step",  "per m/s of raw speed, regardless of direction (HACKABLE!)"),
+    "speed_bonus":          (+1, "step",  "per km/h of raw speed, regardless of direction (HACKABLE!)"),
+}
+
+# plain-English names (game cards, HUD); the YAML keeps the short names above
+TITLES = {
+    "progress": "Driving toward the spot", "goal_reached": "Parked", "parking_precision": "Parked neatly",
+    "collision": "Crash", "pedestrian_hit": "Hit a pedestrian", "pedestrian_proximity": "Too close to people",
+    "crosswalk_yield": "Did not let someone cross", "speeding": "Speeding", "red_light": "Ran a red light",
+    "stop_sign": "Rolled a stop sign", "lane_deviation": "Out of the lane", "off_road": "Wheels off the road",
+    "comfort": "Jerky driving", "stall": "Standing still for no reason", "time": "Time passing",
+    "off_route": "Got lost (off the route)", "stuck": "Stuck (12 s still)", "speed_bonus": "Speed bonus",
+}
+
+# short versions for the live view's reward panel (little room there)
+SHORT_TITLES = {
+    "progress": "Toward the spot", "goal_reached": "Parked", "parking_precision": "Parked neatly",
+    "collision": "Crash", "pedestrian_hit": "Hit a pedestrian", "pedestrian_proximity": "Close to people",
+    "crosswalk_yield": "Crosswalk", "speeding": "Speeding", "red_light": "Red light", "stop_sign": "Stop sign",
+    "lane_deviation": "Out of lane", "off_road": "Off the road", "comfort": "Jerky driving",
+    "stall": "Standing still", "time": "Time", "off_route": "Got lost", "stuck": "Stuck",
+    "speed_bonus": "Speed bonus",
 }
 
 DEFAULT_SETTINGS = {
@@ -93,7 +114,7 @@ DEFAULT_TERMS = {
     "pedestrian_hit": dict(enabled=True, weight=-100.0),
     "pedestrian_proximity": dict(enabled=True, weight=-0.1),
     "crosswalk_yield": dict(enabled=True, weight=-10.0),
-    "speeding": dict(enabled=True, weight=-0.05),
+    "speeding": dict(enabled=True, weight=-0.014),
     "red_light": dict(enabled=True, weight=-20.0),
     "stop_sign": dict(enabled=True, weight=-10.0),
     "lane_deviation": dict(enabled=True, weight=-0.03),
@@ -103,7 +124,7 @@ DEFAULT_TERMS = {
     "time": dict(enabled=True, weight=-0.005),
     "off_route": dict(enabled=True, weight=-20.0),
     "stuck": dict(enabled=True, weight=-20.0),
-    "speed_bonus": dict(enabled=False, weight=0.02),
+    "speed_bonus": dict(enabled=False, weight=0.0056),
 }
 
 # ---------------------------------------------------------------- custom rewards
@@ -202,8 +223,8 @@ def parse_config(user: dict, where="config", allow_empty=False) -> dict:
            "name": user.get("name", "reward"), "description": user.get("description", ""),
            "custom": [], "format": FORMAT}
     fmt = int(user.get("format", 1))
-    if fmt not in (1, 2):
-        raise RewardConfigError(f"{where}: unknown format {fmt} (use 2).")
+    if fmt not in (1, 2, 3):
+        raise RewardConfigError(f"{where}: unknown format {fmt} (use {FORMAT}).")
     for t in cfg["terms"].values():                       # only what you write counts
         t["enabled"] = False
     for k, v in (user.get("terms") or {}).items():
@@ -231,6 +252,8 @@ def parse_config(user: dict, where="config", allow_empty=False) -> dict:
                 raise RewardConfigError(f"Weight of '{k}' is negative in an old-format file. Add "
                                         f"'format: 2' at the top to write signed points instead.")
             w = TERMS[k][0] * w
+        if fmt < 3 and k in KMH_TERMS:
+            w = w / 3.6           # older files counted these per m/s; now per km/h (same behaviour)
         cfg["terms"][k] = {"enabled": enabled, "weight": w}
     for k, v in (user.get("settings") or {}).items():
         if k not in DEFAULT_SETTINGS:
@@ -339,7 +362,7 @@ class RewardComputer:
         sig["pedestrian_proximity"] = m["ped_close"] * min(1.0, m["speed"] / 3.0)
         sig["crosswalk_yield"] = float(m["crosswalk_violation"])
         tol = st["speed_tolerance_kmh"] / 3.6
-        sig["speeding"] = max(0.0, m["speed"] - (m["limit"] + tol))
+        sig["speeding"] = 3.6 * max(0.0, m["speed"] - (m["limit"] + tol))      # km/h over
         sig["red_light"] = float(m["red_violation"])
         sig["stop_sign"] = float(m["stop_violation"])
         # distance from the planned path: the lane centre on streets, the
@@ -354,7 +377,7 @@ class RewardComputer:
         sig["time"] = 1.0
         sig["off_route"] = float(m["off_route"])
         sig["stuck"] = float(m["stuck"])
-        sig["speed_bonus"] = m["speed"]
+        sig["speed_bonus"] = 3.6 * m["speed"]                                   # km/h
         return sig
 
     @staticmethod

@@ -38,7 +38,7 @@ import pygame
 from .city import (AISLE_HW, CORNER_OFF, CROSSWALK_W, LANE_OFF, LANE_W, PARKED_OFF, ROAD_HW,
                    SIDEWALK_W, SLOT_D, SLOT_W, STOPLINE_D, right_of)
 from .geometry import obb_corners, wrap_angle
-from .rewards import active_names
+from .rewards import SHORT_TITLES, active_names
 from .sensors import CAMERAS, CLS_NONE, CLS_PED, CLS_STATIC, CLS_VEHICLE
 from .carart import ASPECT, BODY_W
 from .vehicle import LENGTH, WIDTH
@@ -1160,7 +1160,7 @@ class Renderer:
             yy = 62 + j * 19
             v = env.ep[k]
             active = abs(env.last_terms.get(k, 0.0)) > 1e-9
-            label = k.replace("custom_", "★ ", 1).replace("_", " ")
+            label = SHORT_TITLES.get(k) or k.replace("custom_", "★ ", 1).replace("_", " ")
             self._text(label[:24], (x0 + 16, yy), "tiny", C["hud_fg"] if active else C["hud_dim"])
             bw = int(70 * abs(v) / vmax)
             col = C["pos"] if v >= 0 else C["neg"]
