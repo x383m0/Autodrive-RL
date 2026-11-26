@@ -1,0 +1,16 @@
+REWARD DESIGNER - teach a self-driving car by designing its reward
+
+1. Double-click AutodriveGame (AutodriveGame.exe on Windows).
+   A small window opens and the game opens in your web browser.
+   If the browser does not open, go to  http://localhost:8000
+2. Keep the small window open while you play. Close it to quit.
+
+Your progress and trained cars are saved in a folder called
+"AutodriveGame" in your home folder (e.g. C:\Users\you\AutodriveGame).
+
+Windows may say "Windows protected your PC" because the game is not signed:
+click "More info" -> "Run anyway".
+macOS may say the app is from an unidentified developer: right-click
+AutodriveGame -> Open -> Open.
+
+Training uses your processor (no graphics card needed). Plug in laptops.

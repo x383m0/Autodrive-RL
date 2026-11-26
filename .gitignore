@@ -22,3 +22,9 @@ experiments/
 
 # game progress (local)
 games/
+
+# PyInstaller output
+/dist/
+/build/
+packaging/build/
+packaging/dist/

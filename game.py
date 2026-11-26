@@ -41,10 +41,11 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-GAMES = ROOT / "games"
+from autodrive.paths import DATA_DIR, EXPERIMENTS, train_command  # noqa: E402
+GAMES = DATA_DIR / "games"
 PROGRESS = GAMES / "progress.json"
 LIBRARY = GAMES / "custom_rewards.json"
-RUNS = ROOT / "experiments" / "game"
+RUNS = EXPERIMENTS / "game"
 SOUNDS = ROOT / "assets" / "sounds"
 PAGE = ROOT / "assets" / "game.html"
 
@@ -276,7 +277,7 @@ class Game:
             run.mkdir(parents=True, exist_ok=True)
             # full snapshot of the rewards used (custom rewards included)
             (run / "my_reward.yaml").write_text(yaml.safe_dump(to_yaml_dict(cfg), sort_keys=False))
-            cmd = [sys.executable, str(ROOT / "train.py"), "--reward", str(run / "my_reward.yaml"),
+            cmd = train_command() + ["--reward", str(run / "my_reward.yaml"),
                    "--name", f"game/{run.name}", "--level", str(lid), "--minutes", str(minutes),
                    "--ckpt-every", "40000"]
             # continue an earlier car: same weights, same sensor normalisation and,
@@ -298,7 +299,7 @@ class Game:
                         cmd += ["--start-stage", str(max(0, min(k, len(lv["curriculum"]) - 1)))]
                     except Exception:
                         pass
-            self.proc = subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            self.proc = subprocess.Popen(cmd, cwd=DATA_DIR, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                          text=True, bufsize=1)
             self.phase, self.level_id, self.run_dir = "training", lid, run
             self.t_start, self.minutes, self.recipe, self.cfg = time.time(), float(minutes), recipe, cfg
@@ -563,7 +564,7 @@ def make_handler(game: Game):
     return H
 
 
-def main():
+def main(argv=None, on_ready=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--host", default="127.0.0.1")
@@ -571,7 +572,7 @@ def main():
     ap.add_argument("--quality", type=int, default=90)
     ap.add_argument("--debug", action="store_true",
                     help="debug mode: unlock every level to try it (progress is still saved)")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
     global DEBUG
     DEBUG = args.debug
     RUNS.mkdir(parents=True, exist_ok=True)
@@ -580,6 +581,8 @@ def main():
     srv.daemon_threads = True
     print(f"[game] Reward Designer running: open http://localhost:{args.port}   (Ctrl+C to quit)"
           + ("\n[game] DEBUG MODE: all levels unlocked" if DEBUG else ""))
+    if on_ready:
+        on_ready(f"http://localhost:{args.port}", srv)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

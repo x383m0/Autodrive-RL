@@ -126,7 +126,8 @@ def main():
         args.minutes = min(args.minutes, 2.0)
         args.video_episodes = 1
     name = args.name or Path(args.reward).stem
-    out = ROOT / "experiments" / name
+    from autodrive.paths import EXPERIMENTS
+    out = EXPERIMENTS / name
     if not args.resume:
         # check the reward file BEFORE creating anything, and name the user's file
         try:
@@ -186,7 +187,9 @@ def main():
 
     venv = SubprocVecEnv([make_env_fn(reward_cfg, tracker.stage, i, args.seed + int(time.time()) % 1000 * args.resume,
                                       args.level)
-                          for i in range(args.n_envs)])
+                          for i in range(args.n_envs)],
+                         # the packaged app can only start workers by re-running itself
+                         start_method="spawn" if getattr(sys, "frozen", False) else None)
     init = Path(args.init_from) if args.init_from else None
     if init is not None and not (init / "model.zip").exists():
         sys.exit(f"--init-from: no model.zip in {init}")
