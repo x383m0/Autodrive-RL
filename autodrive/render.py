@@ -1093,7 +1093,7 @@ class Renderer:
         # ---------- left: speed cluster ----------
         self._panel(pygame.Rect(14, 14, 250, 196))
         kmh = car.v * 3.6
-        limit = env.route.limit(env.s) * 3.6
+        limit = env.posted_limit(env.s) * 3.6
         over = kmh > limit + env.reward_cfg["settings"]["speed_tolerance_kmh"]
         self._text(f"{kmh:3.0f}", (30, 22), "huge", C["neg"] if over else C["hud_fg"])
         self._text("km/h", (34, 84), "small", C["hud_dim"])

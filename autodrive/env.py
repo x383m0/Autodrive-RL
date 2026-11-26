@@ -152,7 +152,17 @@ class AutoDriveEnv(gym.Env):
         # The posted speed tapers to walking pace in the last metres before the
         # slot (like creeping into a parking space): v <= 0.3 + sqrt(2 * 0.8 * d).
         togo = self.route.length - self.route.s
+        posted = self.route.limits.copy()
         self.route.limits = np.minimum(self.route.limits, 0.3 + np.sqrt(2 * 0.8 * np.maximum(togo, 0)))
+        # The taper is ADVICE the car sees (it helps it slow down for the slot).
+        # The POSTED limit - shown on the speedometer, used by the speeding reward,
+        # the stats and the score - only includes it outside the game's
+        # "no speed limits except school zones" rule.
+        if p.get("no_limits"):        # game rule: the only posted limits are school zones
+            posted = np.where(self.route.school, posted, 30.0)
+            self.route.posted = posted
+        else:
+            self.route.posted = self.route.limits.copy()
         s0 = 0.0
         if p.get("start_togo"):
             # reverse curriculum: start part-way along the route, near the goal
@@ -170,6 +180,11 @@ class AutoDriveEnv(gym.Env):
                                       reckless=float(p.get("reckless", 1.0)))
         self.peds = PedestrianManager(self.city, rng, p["n_peds"], jaywalk_prob=p["jaywalk"],
                                       n_kids=p["n_kids"])
+
+    def posted_limit(self, s):
+        """The real speed limit at arc length s (m/s), see _build_world."""
+        r = self.route
+        return float(getattr(r, "posted", r.limits)[r.idx(s)])
 
     def _route_ok(self, p):
         r = self.route
@@ -433,7 +448,7 @@ class AutoDriveEnv(gym.Env):
                                  + 0.3 * he / PARK_HEAD_TOL, 0, 1))
         self.park_loc = (loc, he)
 
-        limit = route.limit(s_new)
+        limit = self.posted_limit(s_new)
         jerk = (car.a - car.prev_a) / DT
         steer_rate = abs(car.delta - prev_delta) / DT
         on_street = s_new < route.in_lot_s
@@ -558,7 +573,10 @@ class AutoDriveEnv(gym.Env):
             "time_s": self.t,
             "route_len": self.route.length,
             "progress": float(self.best_s),
-            "progress_frac": float(min(self.best_s / self.route.length, 1.0)),
+            # share of THIS drive done: from where the car started, not from the
+            # start of the route (practice drives and level 1 start part-way)
+            "progress_frac": float(np.clip((self.best_s - self.start_s)
+                                           / max(self.route.length - self.start_s, 1e-6), 0.0, 1.0)),
             "distance": self.car.odometer,
             "mean_speed": st["speed_sum"] / n,
             "collision": self.status == "collision",
