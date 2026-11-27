@@ -36,7 +36,7 @@ def _stage(name, **kw):
     return d
 
 
-def _park_lessons(bands, advance=0.6):
+def _park_lessons(bands, advance=0.75):
     return [_stage(f"park from {lo}-{hi} m", hops=(0, 0), start_togo=(float(lo), float(hi)),
                    advance=advance) for lo, hi in bands]
 
