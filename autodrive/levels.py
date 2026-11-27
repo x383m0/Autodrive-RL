@@ -98,7 +98,7 @@ LEVELS = [
          curriculum=_park_lessons([(1, 6), (4, 15), (12, 30), (25, 70)])
          + [_stage("empty streets", hops=(0, 1), parked=0.3)],
          test=_stage("Into town (test)", hops=(1, 2), parked=0.3, **_TRIP)),
-    dict(id=5, name="Rules of the road", available=True, score="speed", rules=True, minutes=15,
+    dict(id=5, name="Rules of the road", available=True, score="speed", rules=True, minutes=18,
          brief="Traffic lights, stop signs and school zones appear. School zones are the only "
                "places with a speed limit. Every rule you break costs points.",
          terms=TERMS_5, stars=(500, 650, 800),
