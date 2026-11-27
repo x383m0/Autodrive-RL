@@ -98,22 +98,31 @@ entry in `autodrive/levels.py`:
   8 min; level 3 reaches the full road at ~6.5 min and parks ~77% by 12 min.
   Default training times: 8 and 10 min.
 
-### Balance check (balanced reward, default time, the game's hidden 12-drive test, one run each)
+### Balance check (balanced reward, default time, the game's hidden 12-drive test)
 
-| Level | Default time | Test score | Stars | Test drives |
+City levels vary a lot from one training run to the next (same reward, different
+random seed), so levels 4-6 were measured on several seeds.
+
+| Level | Default time | Test score | Stars (1/2/3 at) | Notes |
 |---|---|---|---|---|
-| 1 Park here | 3 min | 908 | 3 | 11 parked, 1 off route |
-| 2 Straight road | 8 min | 853 | 3 | 11 parked, 1 stuck |
-| 3 Bends | 10 min | 813 | 2 | 10 parked, 2 collisions |
-| 4 Into town | 14 min | 784 | 2 | 10 parked, 2 stuck (10 min gave 580 = barely 1 star) |
-| 5 Rules of the road | 15 min | 668 | 2 | 9 parked, 1 stuck, 1 off route, 1 collision |
+| 1 Park here | 3 min | 888 | 3 (600/750/880) | 11 parked, 1 stuck |
+| 2 Straight road | 8 min | 916 | 3 (550/700/850) | 12 parked |
+| 3 Bends | 10 min | 917 | 3 (550/700/850) | 12 parked |
+| 4 Into town | 14 min | 826 / 872 / 828 | 2-3 (550/700/850) | 3 seeds, 11-12 parked each |
+| 5 Rules of the road | 18 min | 412 / 755 / 698 | 0-3, usually 2 (500/650/800) | 3 seeds; the bad run stops in front of the spot, misaligned |
+| 6 Rush hour | 25 min from the level-5 car | 320 - 484 (6 runs, median ~410) | usually 1 (380/550/720) | collisions and pedestrian hits remain |
 
-| 6 Rush hour | 20 min from the level-5 car | 484 | 1 | 7 parked, 3 collisions, 1 pedestrian, 1 stuck |
-| 6 Rush hour | 25 min, new car | 399 | 0 | 5 parked, 4 collisions, 2 stuck, 1 pedestrian |
+Two fixes came out of this check:
+- **Arriving too fast** (approach_speed) is a level-1 card: without a penalty for
+  arriving too fast, cars overshoot the spot and learn to freeze (level 3: 316 vs 914).
+- City parking lessons advance at 75% success instead of 60%: a lucky 100-drive
+  window let cars reach the streets parking only 44% of the time, and they then
+  froze (level 4 at 60%: 199 / 134 / 883; at 75%: 826 / 872 / 828).
 
 Levels 1-5 are winnable in their default time with a sensible reward; a
 well-designed reward should reach 3 stars. Level 6 is won by continuing from
-the level-5 car (preselected in "Start from"); a new car falls just short.
+the level-5 car (preselected in "Start from"); its thresholds were lowered
+(450/600/750 -> 380/550/720) to match what a sensible reward reaches.
 - The level's curriculum runs automatically behind the scenes (e.g. starting
   close to the spot first); the player only designs the reward.
 - **Start from**: a new car, *continue my last car here*, *continue my best car

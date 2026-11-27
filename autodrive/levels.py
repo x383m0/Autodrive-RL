@@ -111,7 +111,7 @@ LEVELS = [
          brief="Other cars and people on the sidewalks and crosswalks. Everyone behaves - "
                "no reckless drivers, no jaywalkers - but a crash or a hit pedestrian ends the drive. "
                "Tip: start from your best car of level 5.",
-         terms=TERMS_6, stars=(450, 600, 750),
+         terms=TERMS_6, stars=(380, 550, 720),
          curriculum=_park_lessons([(1, 6), (4, 15), (12, 30), (25, 70)])
          + [_stage("empty streets", hops=(0, 1), parked=0.3),
             _stage("rules", hops=(1, 3), controls=True, parked=0.3, school=0.2),
